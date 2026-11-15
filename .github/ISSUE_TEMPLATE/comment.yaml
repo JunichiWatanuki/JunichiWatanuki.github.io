@@ -1,0 +1,30 @@
+name: 記事へのコメント (Blog Comment)
+description: ブログ記事への新しいコメントスレッドを作成します
+title: "[Comment] "
+labels: ["comment-for-post"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        サイト記事へのコメント投稿ありがとうございます！
+        以下のフォームにコメントを入力して「Submit new issue」を押すと、数分後に記事ページへ反映されます。
+        ※ **対象記事パス** には記事のURLが自動入力されていますので、変更せずそのまま送信してください。
+
+  - type: input
+    id: post_path
+    attributes:
+      label: 対象記事パス (Post Path)
+      description: コメント対象の記事URLです（自動入力されます・編集不要）
+      placeholder: https://junichiwatanuki.github.io/data/contents/category/YYYY-MM-DD.html
+    validations:
+      required: true
+
+  - type: textarea
+    id: comment_body
+    attributes:
+      label: コメント内容 (Comment)
+      description: 記事へのコメントを入力してください（Markdown記法が利用可能です）
+      placeholder: ここにコメントを入力してください...
+    validations:
+      required: true
+

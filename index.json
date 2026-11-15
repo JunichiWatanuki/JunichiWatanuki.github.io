@@ -1,0 +1,186 @@
+{
+  "site": {
+    "title": "Monolog-jwat",
+    "description": "走ること、つくること、日々の小さな発見を綴るブログ。"
+  },
+  "menu": [
+    {
+      "label": "ホーム",
+      "href": "index.html"
+    },
+    {
+      "label": "ブログ",
+      "href": "index.html#blog",
+      "children": [
+        {
+          "label": "個人サイトのリニューアル",
+          "href": "data/contents/blog/2026-11-14.html"
+        }
+      ]
+    },
+    {
+      "label": "トレーニング",
+      "href": "index.html#training",
+      "children": [
+        {
+          "label": "2026年",
+          "children": [
+            {
+              "label": "11月",
+              "children": [
+                {
+                  "label": "Swim 2026-11-14 19:37:59 JST",
+                  "href": "data/contents/training/2026-11-14_19-37-59.html"
+                },
+                {
+                  "label": "Swim 2026-11-13 21:55:01 JST",
+                  "href": "data/contents/training/2026-11-13_21-55-01.html"
+                },
+                {
+                  "label": "Swim 2026-11-12 21:59:59 JST",
+                  "href": "data/contents/training/2026-11-12_21-59-59.html"
+                },
+                {
+                  "label": "Swim 2026-11-11 20:53:37 JST",
+                  "href": "data/contents/training/2026-11-11_20-53-37.html"
+                },
+                {
+                  "label": "Swim 2026-11-10 22:00:02 JST",
+                  "href": "data/contents/training/2026-11-10_22-00-02.html"
+                },
+                {
+                  "label": "Jog 2026-11-09 19:00:49 JST",
+                  "href": "data/contents/training/2026-11-09_19-00-49.html"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "サンプル",
+      "href": "index.html#sample-posts",
+      "children": [
+        {
+          "label": "2025年4月7日のサンプル",
+          "href": "data/contents/sample/2025-04-07.html"
+        },
+        {
+          "label": "2025年2月5日のサンプル",
+          "href": "data/contents/sample/2025-02-05.html"
+        },
+        {
+          "label": "2025年1月28日のサンプル",
+          "href": "data/contents/sample/2025-01-28.html"
+        },
+        {
+          "label": "2025年1月14日のサンプル",
+          "href": "data/contents/sample/2025-01-14.html"
+        },
+        {
+          "label": "2024年12月25日のサンプル",
+          "href": "data/contents/sample/2024-12-25.html"
+        }
+      ]
+    }
+  ],
+  "posts": [
+    {
+      "title": "Swim 2026-11-14 19:37:59 JST",
+      "date": "2026-11-14",
+      "type": "training",
+      "path": "data/contents/training/2026-11-14_19-37-59.html",
+      "excerpt": "FITデータに記録されたセッションとラップの記録。",
+      "thumbnail": "data/sources/training/thumbnail.jpg"
+    },
+    {
+      "title": "個人サイトのリニューアル",
+      "date": "2026-11-14",
+      "type": "blog",
+      "path": "data/contents/blog/2026-11-14.html",
+      "excerpt": "思い出したタイミングでリニューアルしました。",
+      "thumbnail": "data/sources/blog/thumbnail.jpg"
+    },
+    {
+      "title": "Swim 2026-11-13 21:55:01 JST",
+      "date": "2026-11-13",
+      "type": "training",
+      "path": "data/contents/training/2026-11-13_21-55-01.html",
+      "excerpt": "FITデータに記録されたセッションとラップの記録。",
+      "thumbnail": "data/sources/training/thumbnail.jpg"
+    },
+    {
+      "title": "Swim 2026-11-12 21:59:59 JST",
+      "date": "2026-11-12",
+      "type": "training",
+      "path": "data/contents/training/2026-11-12_21-59-59.html",
+      "excerpt": "FITデータに記録されたセッションとラップの記録。",
+      "thumbnail": "data/sources/training/thumbnail.jpg"
+    },
+    {
+      "title": "Swim 2026-11-11 20:53:37 JST",
+      "date": "2026-11-11",
+      "type": "training",
+      "path": "data/contents/training/2026-11-11_20-53-37.html",
+      "excerpt": "FITデータに記録されたセッションとラップの記録。",
+      "thumbnail": "data/sources/training/thumbnail.jpg"
+    },
+    {
+      "title": "Swim 2026-11-10 22:00:02 JST",
+      "date": "2026-11-10",
+      "type": "training",
+      "path": "data/contents/training/2026-11-10_22-00-02.html",
+      "excerpt": "FITデータに記録されたセッションとラップの記録。",
+      "thumbnail": "data/sources/training/thumbnail.jpg"
+    },
+    {
+      "title": "Jog 2026-11-09 19:00:49 JST",
+      "date": "2026-11-09",
+      "type": "training",
+      "path": "data/contents/training/2026-11-09_19-00-49.html",
+      "excerpt": "FITデータに記録されたセッションとラップの記録。",
+      "thumbnail": "data/sources/training/thumbnail.jpg"
+    },
+    {
+      "title": "2025年4月7日のサンプル",
+      "date": "2025-04-07",
+      "type": "sample",
+      "path": "data/contents/sample/2025-04-07.html",
+      "excerpt": "サンプルの記録：ランニング、体幹トレーニング、ストレッチ",
+      "thumbnail": "data/sources/sample/thumbnail.jpg"
+    },
+    {
+      "title": "2025年2月5日のサンプル",
+      "date": "2025-02-05",
+      "type": "sample",
+      "path": "data/contents/sample/2025-02-05.html",
+      "excerpt": "サンプルの記録：バイク、ストレッチ",
+      "thumbnail": "data/sources/sample/thumbnail.jpg"
+    },
+    {
+      "title": "2025年1月28日のサンプル",
+      "date": "2025-01-28",
+      "type": "sample",
+      "path": "data/contents/sample/2025-01-28.html",
+      "excerpt": "サンプルの記録：ランニング、プランク",
+      "thumbnail": "data/sources/sample/thumbnail.jpg"
+    },
+    {
+      "title": "2025年1月14日のサンプル",
+      "date": "2025-01-14",
+      "type": "sample",
+      "path": "data/contents/sample/2025-01-14.html",
+      "excerpt": "サンプルの記録：ジョギング、スクワット",
+      "thumbnail": "data/sources/sample/thumbnail.jpg"
+    },
+    {
+      "title": "2024年12月25日のサンプル",
+      "date": "2024-12-25",
+      "type": "sample",
+      "path": "data/contents/sample/2024-12-25.html",
+      "excerpt": "サンプルの記録：ウォーキング、ストレッチ",
+      "thumbnail": "data/sources/sample/thumbnail.jpg"
+    }
+  ]
+}

@@ -1,0 +1,340 @@
+name: Build and deploy GitHub Pages
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'data/sources/**'
+      - 'index.html'
+      - 'index.css'
+      - 'index.js'
+      - 'js/**'
+      - 'assets/**'
+      - 'scripts/**'
+      - 'data/comments/archive/**'
+      - '.github/**'
+  workflow_dispatch:
+  issues:
+    types: [opened, edited, closed, reopened, deleted, labeled, unlabeled, transferred]
+  issue_comment:
+    types: [created, edited, deleted]
+
+permissions:
+  contents: write
+  issues: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  deploy:
+    if: >-
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch' ||
+       (!github.event.issue.pull_request &&
+        (contains(github.event.issue.labels.*.name, 'comment-for-post') ||
+         github.event.label.name == 'comment-for-post')))
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Issue events may wait behind an earlier bot commit. Build the latest
+          # branch head and preserve the non-force-push guard below.
+          ref: ${{ github.ref }}
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install index generator dependencies
+        run: python -m pip install -r scripts/requirements.txt
+      - name: Ensure comment label exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! gh api "repos/$GITHUB_REPOSITORY/labels/comment-for-post" >/dev/null 2>&1; then
+            # Do not change an existing label. A second read handles a creation race.
+            gh label create comment-for-post --repo "$GITHUB_REPOSITORY" \
+              --description 'Comments on published articles' --color 85b5a0 || \
+              gh api "repos/$GITHUB_REPOSITORY/labels/comment-for-post" >/dev/null
+          fi
+      - name: Prepare clean static site
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -L index.json ] || [ -L .site ] || [ -L .site/index.json ]; then
+            echo 'Refusing a symlink for index.json, .site, or .site/index.json.' >&2
+            exit 1
+          fi
+          for path in data/comments data/comments/archive; do
+            if [ -L "$path" ]; then
+              echo "Refusing symlink in archive path: $path" >&2; exit 1
+            fi
+          done
+          if [ -d data/comments/archive ]; then
+            test -z "$(find data/comments/archive -type l -print -quit)"
+          fi
+          python scripts/prepare_site.py --site-dir .site
+      - name: Generate all blog content
+        uses: ./.github/actions/blog
+        with:
+          site-dir: .site
+      - name: Generate all training content
+        uses: ./.github/actions/training
+        with:
+          site-dir: .site
+      - name: Generate all sample content
+        uses: ./.github/actions/sample
+        with:
+          site-dir: .site
+      - name: Restore generated content ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Docker actions create the generated content as root. The runner
+          # must be able to replace those files when synchronizing comments.
+          for path in .site .site/data .site/data/contents; do
+            if [ -L "$path" ] || [ ! -d "$path" ]; then
+              echo "Refusing a missing directory or symlink: $path" >&2
+              exit 1
+            fi
+          done
+          sudo chown -R --no-dereference "$(id -u):$(id -g)" -- .site/data/contents
+      - name: Generate index.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -L index.json ] || [ -L .site ] || [ -L .site/index.json ]; then
+            echo 'Refusing a symlink for index.json, .site, or .site/index.json.' >&2
+            exit 1
+          fi
+          python scripts/build_index.py --site-dir .site
+      - name: Sync article comments and archive closed issues
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python scripts/sync_comments.py --site-dir .site --repository "$GITHUB_REPOSITORY"
+      - name: Save generated contents and index
+        id: save_generated
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$GITHUB_REF" in
+            refs/heads/main|refs/heads/master) ;;
+            *) echo "Refusing to save from an unsupported ref: $GITHUB_REF" >&2; exit 1 ;;
+          esac
+          BASE_SHA=$(git rev-parse HEAD)
+          git fetch --no-tags origin "$GITHUB_REF"
+          if [ "$(git rev-parse FETCH_HEAD)" != "$BASE_SHA" ]; then
+            echo 'Branch changed after checkout; refusing to save or deploy.' >&2
+            exit 1
+          fi
+
+          # Refuse to replace anything unless the complete build exists.
+          test -d data && test ! -L data
+          test -d .site && test ! -L .site
+          test -d .site/data && test ! -L .site/data
+          test -f .site/.greenlog-build && test ! -L .site/.greenlog-build
+          test -f .site/index.json && test -s .site/index.json && test ! -L .site/index.json
+          test ! -L index.json
+          if [ -e index.json ] && [ ! -f index.json ]; then
+            echo 'The destination index.json is not a regular file.' >&2
+            exit 1
+          fi
+          test -d .site/data/contents && test ! -L .site/data/contents
+          test -z "$(find .site/data/contents -type l -print -quit)"
+          for path in data/comments data/comments/archive .site/data/comments .site/data/comments/archive; do
+            test ! -L "$path"
+            if [ -e "$path" ] && [ ! -d "$path" ]; then
+              echo "Not a directory: $path" >&2; exit 1
+            fi
+          done
+          if [ -d .site/data/comments/archive ]; then
+            test -z "$(find .site/data/comments/archive -type l -print -quit)"
+          fi
+          for kind in blog training sample; do
+            test -d ".site/data/contents/$kind"
+            for ext in css js; do
+              cmp -- "data/sources/$kind/$kind.$ext" ".site/data/contents/$kind/$kind.$ext"
+            done
+          done
+          PYTHONPATH=scripts python - <<'PY'
+          import json
+          from pathlib import Path
+          from urllib.parse import quote
+          from content import KINDS, article_paths
+          from fit_training import created_at, decode_fit
+          expected = set()
+          for kind in KINDS:
+              for source, output, _ in article_paths(Path.cwd(), kind):
+                  page = Path('.site') / output
+                  if not page.is_file() or page.stat().st_size == 0:
+                      raise SystemExit(f'Missing or empty generated article: {page}')
+                  if kind == 'training':
+                      source_rel = source.relative_to(Path.cwd() / 'data/sources/training')
+                      fit_json = Path('.site/data/contents/training') / source_rel.with_suffix('.json')
+                      if not fit_json.is_file() or fit_json.stat().st_size == 0:
+                          raise SystemExit(f'Missing or empty generated FIT JSON: {fit_json}')
+                      messages = json.loads(fit_json.read_text(encoding='utf-8'))
+                      # Different official SDK releases can expose different
+                      # decoded fields. Validate the stable source identity and
+                      # timestamp without requiring identical SDK versions.
+                      if created_at(messages) != created_at(decode_fit(source)):
+                          raise SystemExit(f'Generated FIT JSON timestamp differs from source: {fit_json}')
+                      if output.stem != created_at(messages).strftime('%Y-%m-%d_%H-%M-%S'):
+                          raise SystemExit(f'FIT HTML timestamp does not match JSON: {page}')
+                  expected.add(quote(output.as_posix(), safe='/'))
+          posts = json.loads(Path('.site/index.json').read_text(encoding='utf-8'))['posts']
+          if (not isinstance(posts, list) or
+                  any(not isinstance(post, dict) or not isinstance(post.get('path'), str) for post in posts) or
+                  len(posts) != len(expected) or {post['path'] for post in posts} != expected):
+              raise SystemExit('Generated index does not match the generated articles')
+          PY
+
+          # This tree and root index are generated, not sources of truth.
+          git diff --cached --quiet || { echo 'Unexpected staged changes; refusing to commit.' >&2; exit 1; }
+          rm -rf -- data/contents
+          mkdir -p -- data/contents
+          cp -a -- .site/data/contents/. data/contents/
+          cp -- .site/index.json index.json
+          mkdir -p -- data/comments/archive .site/data/comments/archive
+          cp -a -- .site/data/comments/archive/. data/comments/archive/
+          git add --all -- data/contents index.json data/comments/archive
+
+          # Check that Git will store exactly the generated files, without omitted
+          # ignored files or filters that silently alter the generated bytes.
+          validate_generated_tree() {
+            python - "$1" <<'PY'
+          import os
+          import subprocess
+          import sys
+          from pathlib import Path
+          site = Path('.site')
+          expected = {'index.json': site / 'index.json'}
+          for folder in ('data/contents', 'data/comments/archive'):
+              base = site / folder
+              for path in base.rglob('*'):
+                  if path.is_file():
+                      expected[folder + '/' + path.relative_to(base).as_posix()] = path
+          if sys.argv[1] == 'index':
+              command = ['git', 'ls-files', '--stage', '-z', '--', 'data/contents', 'index.json', 'data/comments/archive']
+          else:
+              command = ['git', 'ls-tree', '-r', '-z', 'HEAD', '--', 'data/contents', 'index.json', 'data/comments/archive']
+          actual = {}
+          for record in subprocess.check_output(command).split(b'\0'):
+              if not record:
+                  continue
+              header, name = record.split(b'\t', 1)
+              mode, second, third = header.decode('ascii').split()
+              if mode not in ('100644', '100755'):
+                  raise SystemExit(f'Non-regular generated Git entry: {os.fsdecode(name)}')
+              if sys.argv[1] == 'index':
+                  oid, stage = second, third
+                  if stage != '0':
+                      raise SystemExit('Unmerged generated Git entry')
+              else:
+                  kind, oid = second, third
+                  if kind != 'blob':
+                      raise SystemExit('Non-blob generated Git entry')
+              actual[os.fsdecode(name)] = oid
+          if set(actual) != set(expected):
+              raise SystemExit('Git generated file list differs from the build')
+          for name, path in expected.items():
+              oid = subprocess.check_output(['git', 'hash-object', '--no-filters', '--', str(path)], text=True).strip()
+              if actual[name] != oid:
+                  raise SystemExit(f'Git generated bytes differ from the build: {name}')
+          PY
+          }
+          validate_generated_tree index
+          if git diff --cached --quiet; then
+            echo 'Generated contents and index are unchanged; no commit or push needed.'
+          else
+            git -c user.name='github-actions[bot]' \
+                -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+                commit -m 'Update generated contents and index'
+            test "$(git rev-parse HEAD^)" = "$BASE_SHA"
+            # A commit hook must not add other paths or change generated bytes.
+            git diff-tree --no-commit-id --name-only --no-renames -r -z HEAD^ HEAD | python -c '
+          import sys
+          paths = sys.stdin.buffer.read().split(b"\0")
+          if any(p and p != b"index.json" and not p.startswith((b"data/contents/", b"data/comments/archive/")) for p in paths):
+              raise SystemExit("Unexpected committed path; refusing to push")
+          '
+            validate_generated_tree commit
+
+            # Check Git's advertised old SHA while still running any existing
+            # pre-push hook with its original arguments and input.
+            GREENLOG_EXISTING_PRE_PUSH=$(git rev-parse --path-format=absolute --git-path hooks/pre-push)
+            hooks_dir=$(mktemp -d "${RUNNER_TEMP:?}/greenlog-push-hooks.XXXXXX")
+            trap 'rm -rf -- "$hooks_dir"' EXIT
+            trap 'exit 1' HUP INT TERM
+            cat > "$hooks_dir/pre-push" <<'HOOK'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          updates="$GREENLOG_HOOK_DIR/updates"
+          cat > "$updates"
+          count=0
+          while read -r local_ref local_oid remote_ref remote_oid extra; do
+            count=$((count + 1))
+            if [ "$count" -ne 1 ] || [ "$local_ref" != HEAD ] ||
+               [ "$local_oid" != "$GREENLOG_PUSH_HEAD" ] ||
+               [ "$remote_ref" != "$GITHUB_REF" ] ||
+               [ "$remote_oid" != "$GREENLOG_BASE_SHA" ] || [ -n "$extra" ]; then
+              echo 'Unexpected advertised push update; refusing to push.' >&2
+              exit 1
+            fi
+          done < "$updates"
+          if [ "$count" -ne 1 ]; then
+            echo 'Push has no update; refusing to push.' >&2
+            exit 1
+          fi
+          if [ -x "$GREENLOG_EXISTING_PRE_PUSH" ]; then
+            "$GREENLOG_EXISTING_PRE_PUSH" "$@" < "$updates"
+          fi
+          if [ "$(git rev-parse HEAD)" != "$GREENLOG_PUSH_HEAD" ] ||
+             [ "$(git rev-parse HEAD^)" != "$GREENLOG_BASE_SHA" ] ||
+             [ "$(git rev-parse "$GREENLOG_PUSH_HEAD^")" != "$GREENLOG_BASE_SHA" ]; then
+            echo 'Local HEAD changed; refusing to push.' >&2
+            exit 1
+          fi
+          HOOK
+            chmod +x "$hooks_dir/pre-push"
+            GREENLOG_PUSH_HEAD=$(git rev-parse HEAD)
+            GREENLOG_HOOK_DIR=$hooks_dir
+            GREENLOG_BASE_SHA=$BASE_SHA
+            export GREENLOG_PUSH_HEAD GREENLOG_HOOK_DIR GREENLOG_EXISTING_PRE_PUSH GREENLOG_BASE_SHA
+            # Normal push uses Git's server-side old-SHA check; no force push.
+            git -c core.hooksPath="$hooks_dir" push origin "HEAD:$GITHUB_REF"
+            rm -rf -- "$hooks_dir"
+            trap - EXIT HUP INT TERM
+          fi
+          echo "expected_head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .site
+      - name: Verify branch before deploying
+        env:
+          EXPECTED_HEAD: ${{ steps.save_generated.outputs.expected_head }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "$GITHUB_REF"
+          if [ "$(git rev-parse FETCH_HEAD)" != "$EXPECTED_HEAD" ]; then
+            echo 'Branch changed during this run; refusing to deploy stale content.' >&2
+            exit 1
+          fi
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+

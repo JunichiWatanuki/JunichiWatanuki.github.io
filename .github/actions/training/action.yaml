@@ -1,0 +1,12 @@
+name: Build training content
+description: Decode Garmin FIT files to JSON and render training summaries as static HTML.
+inputs:
+  site-dir:
+    description: Prepared output directory relative to GITHUB_WORKSPACE
+    required: true
+runs:
+  using: docker
+  image: Dockerfile
+  args:
+    - ${{ inputs.site-dir }}
+

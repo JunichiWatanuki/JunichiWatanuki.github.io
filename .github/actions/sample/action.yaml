@@ -1,0 +1,12 @@
+name: Build sample content
+description: Render sample CSV as full static HTML tables and copy its media.
+inputs:
+  site-dir:
+    description: Prepared output directory relative to GITHUB_WORKSPACE
+    required: true
+runs:
+  using: docker
+  image: Dockerfile
+  args:
+    - ${{ inputs.site-dir }}
+

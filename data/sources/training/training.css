@@ -1,0 +1,7 @@
+/* この種別の表示調整はこのファイルに追加します。共通レイアウトは ../../../index.css。 */
+.main-article-body { min-width: 0; }
+.main-training-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin: 1.5em 0; padding: 1px; background: var(--main-line); }
+.main-training-metric { min-width: 0; padding: 14px 16px; background: #fff; }
+.main-training-metric dt { color: var(--main-muted); font-size: 11px; }
+.main-training-metric dd { margin: 3px 0 0; color: var(--main-ink); font-weight: 600; overflow-wrap: anywhere; }
+@media (max-width: 700px) { .main-training-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .main-training-metric { padding: 12px; } }

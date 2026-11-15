@@ -1,0 +1,44 @@
+/* この種別の表示調整はこのファイルに追加します。共通レイアウトは ../../../index.css。 */
+.main-article-body { min-width: 0; }
+
+/* 外部サービスの埋め込みは記事幅に収め、元ページへのリンクも残す。 */
+.main-embed { margin: 1.8em 0; max-width: 100%; }
+.main-embed-frame { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; background: #eef3ef; }
+.main-embed-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.main-embed-instagram iframe { display: block; width: 100%; max-width: 540px; height: 680px; border: 0; }
+.main-embed-garmin iframe { display: block; width: 100%; max-width: 465px; height: 548px; border: 0; }
+.main-embed-source { margin-top: .5em; font-size: .9em; }
+.main-embed-source a { overflow-wrap: anywhere; }
+@media (max-width: 500px) { .main-embed-instagram iframe { height: 600px; } }
+
+/* 記事中のコードプレビュー。ソースは常に details に残す。 */
+.main-article-body .main-code-preview { margin: 1.8em 0; max-width: 100%; min-width: 0; border: 1px solid #cbded0; border-radius: 4px; background: #f8fbf8; }
+.main-article-body .main-code-preview-display { min-width: 0; max-width: 100%; overflow: auto; text-align: center; }
+.main-article-body .main-code-preview[data-preview="mermaid"] .main-code-preview-display { padding: 16px; }
+.main-article-body .main-code-preview-display svg, .main-article-body .main-code-preview-display img { display: block; max-width: 100%; height: auto; margin: auto; }
+.main-article-body .main-code-preview[data-preview="stl"] .main-code-preview-display { min-height: 260px; background: #f1f6f1; }
+.main-article-body .main-code-preview-display canvas { display: block; width: 100%; height: clamp(240px, 55vw, 360px); cursor: grab; touch-action: none; }
+.main-article-body .main-code-preview-display canvas:active { cursor: grabbing; }
+.main-article-body .main-code-preview-display canvas:focus-visible, .main-article-body .main-code-preview-source summary:focus-visible { outline: 3px solid #346e58; outline-offset: -3px; }
+.main-article-body .main-code-preview-toolbar { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 10px 18px; padding: 8px 10px 2px; color: #466558; font-size: 12px; }
+.main-article-body .main-code-preview-toolbar button { padding: 5px 9px; border: 1px solid #a9c4b4; border-radius: 3px; color: #315f4d; background: #fff; cursor: pointer; }
+.main-article-body .main-code-preview-toolbar input { vertical-align: middle; accent-color: #346e58; }
+.main-article-body .main-code-preview-help { margin: 0; padding: 5px 10px 8px; color: #466558; font-size: 12px; line-height: 1.6; }
+.main-article-body .main-code-preview-status { margin: 0; padding: 10px 14px; color: #55471e; background: #faf6e9; font-size: 13px; line-height: 1.65; }
+.main-article-body .main-code-preview-status[hidden] { display: none; }
+.main-article-body .main-code-preview-source { border-top: 1px solid #cbded0; }
+.main-article-body .main-code-preview-source summary { padding: 9px 14px; color: #315f4d; font-weight: 600; cursor: pointer; }
+.main-article-body .main-code-preview-source pre { margin: 0; max-width: 100%; border-top: 1px solid #d8e5da; }
+/* Highlight.js produces only spans; unrecognized/offline code retains the default styling. */
+.main-article-body pre > code.hljs { color: #263f34; background: transparent; }
+.main-article-body .hljs-comment, .main-article-body .hljs-quote { color: #536b60; font-style: italic; }
+.main-article-body .hljs-keyword, .main-article-body .hljs-selector-tag, .main-article-body .hljs-name, .main-article-body .hljs-section { color: #245a48; font-weight: 700; }
+.main-article-body .hljs-string, .main-article-body .hljs-attr, .main-article-body .hljs-addition { color: #735218; }
+.main-article-body .hljs-number, .main-article-body .hljs-literal, .main-article-body .hljs-symbol, .main-article-body .hljs-operator { color: #765077; }
+.main-article-body .hljs-built_in, .main-article-body .hljs-type, .main-article-body .hljs-title { color: #286a70; }
+.main-article-body .hljs-meta, .main-article-body .hljs-deletion { color: #8b4942; }
+@media (max-width: 500px) {
+  .main-article-body .main-code-preview[data-preview="mermaid"] .main-code-preview-display { padding: 10px; }
+  .main-article-body .main-code-preview-display canvas { height: 240px; }
+  .main-article-body .main-code-preview-help { font-size: 11px; }
+}

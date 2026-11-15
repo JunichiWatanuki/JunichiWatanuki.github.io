@@ -1,0 +1,5 @@
+# Keep in sync with .github/actions/blog/Dockerfile.
+cmarkgfm==2025.10.22
+github-slugger==0.0.3
+nh3==0.3.2
+garmin-fit-sdk
