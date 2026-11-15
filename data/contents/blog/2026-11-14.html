@@ -1,0 +1,954 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>個人サイトのリニューアル | Monolog-jwat</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&family=Zen+Old+Mincho:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../../index.css"><link rel="stylesheet" href="blog.css">
+  <script type="module" src="blog.js"></script>
+  <script type="module" src="../../../js/comments.js"></script>
+</head>
+<body data-root="../../../" data-index="../../../index.json" id="top">
+  <header class="main-header">
+    <div class="main-header-inner">
+      <a class="main-brand" href="../../../index.html" aria-label="Monolog-jwat ホーム">
+        <span class="main-brand-mark" aria-hidden="true"><svg viewBox="0 0 44 44" fill="none"><circle cx="22" cy="22" r="20.5" stroke="currentColor"/><path d="M6 25c5-2 9-2 15 0s10 2 17-1M7 30c5-2 9-2 14 0s10 2 16-1M12 19l7-9 6 9m-4-2 5-6 7 9" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        <span><span class="main-brand-name">Monolog-jwat</span><span class="main-brand-sub">A JOURNAL OF EVERYDAY LIFE</span></span>
+      </a>
+      <nav class="main-top-nav" aria-label="メインナビゲーション" data-top-nav></nav>
+      <button class="main-menu-toggle" type="button" aria-expanded="false" aria-controls="mobile-nav" data-menu-toggle><span></span><span></span><span class="main-menu-label">MENU</span></button>
+    </div>
+    <nav id="mobile-nav" class="main-mobile-nav" aria-label="スマートフォン用ナビゲーション" data-mobile-nav hidden></nav>
+  </header>
+  <div class="main-site-shell">
+    <aside class="main-left-sidebar" aria-label="カテゴリー">
+      <div class="main-sidebar-sticky">
+        <p class="main-sidebar-kicker">EXPLORE</p>
+        <h2 class="main-sidebar-heading">カテゴリー<span>Category</span></h2>
+        <nav class="main-category-nav" data-category-nav aria-label="カテゴリー一覧"><p class="main-loading">カテゴリーを読み込み中...</p></nav>
+        <div class="main-sidebar-note"><span class="main-sidebar-note-icon">✳</span><p>今日も自分のペース。。<br><small>ONE STEP AT A TIME.</small></p></div>
+      </div>
+    </aside>
+    <main class="main-content">
+      <div class="main-breadcrumb"><a href="../../../index.html">HOME</a><span class="main-breadcrumb-line"></span><span>JOURNAL</span></div>
+      <article class="main-article-wrap"><header class="main-article-header"><span class="main-article-category">JOURNAL</span><h1>個人サイトのリニューアル</h1><time class="main-article-date">2026-11-14</time></header>
+        <div class="main-article-body"><span hidden data-greenlog-syntax-key="glsyntax1aa353c5845925df4cf9874c452e16151fcef8cdbcce856bd37fb3fb61c3aeae"></span><h2 id="10年くらい放置したままだった">10年くらい放置したままだった</h2>
+<p>思い出したタイミングでリニューアルしました。</p>
+<p>これまでは単なる備忘録でしたが、Garminのトレーニングデータの可視化も追加するようにします。</p>
+<p>※ 以下は、動作確認目的で色んなデータを掲載しています。</p>
+<pre lang="js"><code>const ISSUE_URL = 'https://github.com/JunichiWatanuki/JunichiWatanuki.github.io/issues/new';
+const PUBLIC_SITE_URL = 'https://junichiwatanuki.github.io/';
+// Keep a margin below common URL length limits, including proxies and browsers.
+const MAX_PREFILLED_URL_LENGTH = 6000;
+
+function initComments(section) {
+  const form = section.querySelector('[data-comment-form]');
+  const fields = section.querySelector('[data-comment-fields]');
+  const title = form.querySelector('[name="title"]');
+  const body = form.querySelector('[name="comment_body"]');
+  const fallback = form.querySelector('[data-comment-fallback]');
+  const pathInput = form.querySelector('[data-comment-path]');
+  const copyStatus = form.querySelector('[data-comment-copy-status]');
+  const error = form.querySelector('[data-comment-error]');
+  // This path is already URL-encoded by the build; URLSearchParams encodes it
+  // again for transport so GitHub receives the original encoded article URL.
+  const postPath = section.dataset.commentPost || '';
+
+  if (!/^data\/contents\/.+\.html$/i.test(postPath)) {
+    error.textContent = '対象記事のパスを確認できないため、コメントフォームを利用できません。';
+    error.hidden = false;
+    return;
+  }
+  // Always use the public origin, even when this page is viewed in a preview.
+  const postUrl = PUBLIC_SITE_URL + postPath;
+  pathInput.value = postUrl;
+  fields.disabled = false;
+
+  for (const input of [title, body]) {
+    input.addEventListener('input', () =&gt; input.setCustomValidity(''));
+  }
+
+  form.addEventListener('submit', event =&gt; {
+    event.preventDefault();
+    title.setCustomValidity(title.value.trim() ? '' : 'タイトルを入力してください。');
+    body.setCustomValidity(body.value.trim() ? '' : 'コメントを入力してください。');
+    if (!form.reportValidity()) return;
+
+    const params = new URLSearchParams({
+      template: 'comment.yaml',
+      post_path: postUrl,
+      title: title.value,
+      comment_body: body.value
+    });
+    // comment.yaml applies the label; passing labels in the URL requires the
+    // visitor to have label-adding permission and may otherwise result in 404.
+    const url = `${ISSUE_URL}?${params.toString()}`;
+    if (url.length &gt; MAX_PREFILLED_URL_LENGTH) {
+      fallback.hidden = false;
+      copyStatus.textContent = '';
+      return;
+    }
+
+    fallback.hidden = true;
+    const link = document.createElement('a');
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.hidden = true;
+    document.body.append(link);
+    link.click();
+    link.remove();
+  });
+
+  const copyFields = { title, path: pathInput, body };
+  for (const button of form.querySelectorAll('[data-comment-copy]')) {
+    button.addEventListener('click', async () =&gt; {
+      const input = copyFields[button.dataset.commentCopy];
+      if (!input) return;
+      try {
+        if (!navigator.clipboard || !navigator.clipboard.writeText) throw new Error('Clipboard unavailable');
+        await navigator.clipboard.writeText(input.value);
+        copyStatus.textContent = 'コピーしました。GitHubの該当欄に貼り付けてください。';
+      } catch {
+        input.focus();
+        input.select();
+        copyStatus.textContent = 'テキストを選択しました。コピー操作をして、GitHubの該当欄に貼り付けてください。';
+      }
+    });
+  }
+}
+
+document.querySelectorAll('[data-comment-post]').forEach(initComments);
+</code></pre>
+<pre lang="md"><code># hogefuga
+## hogehoge
+### fugafuga
+</code></pre>
+<pre lang="svg" data-syntax-highlight="glsyntax1aa353c5845925df4cf9874c452e16151fcef8cdbcce856bd37fb3fb61c3aeae"><code>&lt;svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 595.281 841.891"&gt;&lt;path fill="#B4B4B5" d="M294.256 732.104a38.273 38.273 0 01-17.806-4.041L17.904 588.803A36.99 36.99 0 010 558.809V246.714a33.672 33.672 0 0119.153-28.943L262.62 113.203a49.29 49.29 0 0118.89-3.286 47.723 47.723 0 0116.426 2.661l277.765 105.817a32.262 32.262 0 0119.711 28.417v312.095a36.566 36.566 0 01-18.068 29.896L311.537 728.26a38.062 38.062 0 01-17.379 3.877l.098-.033z"/&gt;&lt;path fill="#F7F7F7" d="M573.369 224.342L295.604 118.525a46.813 46.813 0 00-30.454.625L21.683 223.717a27.101 27.101 0 00-15.079 22.997v312.095a30.355 30.355 0 0014.455 24.212l258.546 139.261a34.659 34.659 0 0029.008 0l265.576-139.556a29.966 29.966 0 0014.555-24.081V246.55a25.727 25.727 0 00-15.375-22.208z"/&gt;&lt;path fill="#E5E5E6" d="M287.193 471.784V406.08a29.568 29.568 0 00-13.7-23.785l-5.749-3.121-38.174-20.565-10.808-5.815L27.136 249.572c-7.523-4.041-13.699 0-13.699 9.034v295.669a29.567 29.567 0 0013.699 23.785l5.749 3.088 128.518 69.22 16.426 8.804 91.789 49.278 4.041 2.168c7.523 4.041 13.699 0 13.699-9.067v-65.704c0-.689 0-1.38-.164-2.069V589.69c.184-1.029.271-2.074.263-3.121v-65.704a23.042 23.042 0 00-.46-4.205v-40.77c.244-1.354.31-2.735.196-4.106z"/&gt;&lt;path fill="#EEEEEF" d="M567.783 249.539l-36.564 19.219-159.99 84.036-5.584 2.924-40.245 21.156-10.283 5.42a29.567 29.567 0 00-14.027 23.785v295.668c0 9.035 6.309 13.142 14.027 9.067l10.283-5.42 242.383-127.335a29.567 29.567 0 0014.027-23.785V258.606c-.131-9.034-6.437-13.107-14.027-9.067z"/&gt;&lt;path fill="#FFF" d="M556.548 223.685l-65.705-25.198-90.902-34.921-13.633-5.224-41.23-15.835-36.826-14.192-10.48-4.008-4.665-1.807a37.452 37.452 0 00-24.541.361l-49.081 21.157-37.878 16.426-52.136 22.471-86.369 37.254-9.396 4.041c-7.786 3.285-9.034 8.903-2.694 12.32l7.26 3.909 27.432 14.816 13.141 7.129 67.577 36.466 24.771 13.371 105.127 56.768a38.045 38.045 0 0031.735.625l8.344-4.37 105.752-55.487 45.992-24.113 40.508-21.321 3.021-1.577 42.707-22.372 6.572-3.285c7.029-3.812 4.992-9.791-4.403-13.404z"/&gt;&lt;path fill="#E50012" d="M335.025 258.212c-22.471 11.071-59.527 11.564-82.688 1.084s-23.457-27.958-.723-38.93c22.733-10.973 59.43-11.268 82.327-.854 22.898 10.414 23.424 27.826 1.084 38.7z"/&gt;&lt;path fill="#231815" d="M114.424 397.801c0 14.98-10.184 21.649-22.733 14.915-12.55-6.735-22.701-24.278-22.701-39.226s10.151-21.649 22.701-14.948c12.549 6.702 22.733 24.278 22.733 39.259zm111.993 193.137c0 15.046-10.283 21.683-22.997 14.816-12.713-6.866-22.996-24.573-22.996-39.423 0-14.849 10.25-21.649 22.996-14.849 12.747 6.801 22.997 24.377 22.997 39.456zM398.726 427.27c0 15.177-10.414 33.114-23.26 40.079-12.844 6.965-23.16.328-23.16-14.816s10.381-33.049 23.16-40.047c12.78-6.998 23.26-.395 23.26 14.784zm66.656 42.345c0 15.244-10.512 33.279-23.488 40.211s-23.424.23-23.424-14.947 10.48-33.181 23.424-40.179c12.943-6.997 23.488-.393 23.488 14.915zm67.414 42.741c0 15.342-10.645 33.41-23.752 40.342-13.109 6.932-23.654 0-23.654-15.111 0-15.112 10.578-33.313 23.654-40.31 13.075-6.998 23.752-.263 23.752 15.079z"/&gt;&lt;/svg&gt;
+</code></pre>
+<section class="main-code-preview" data-preview="svg"><div class="main-code-preview-display"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1OTUuMjgxIDg0MS44OTEiPjxwYXRoIGZpbGw9IiNCNEI0QjUiIGQ9Ik0yOTQuMjU2IDczMi4xMDRhMzguMjczIDM4LjI3MyAwIDAxLTE3LjgwNi00LjA0MUwxNy45MDQgNTg4LjgwM0EzNi45OSAzNi45OSAwIDAxMCA1NTguODA5VjI0Ni43MTRhMzMuNjcyIDMzLjY3MiAwIDAxMTkuMTUzLTI4Ljk0M0wyNjIuNjIgMTEzLjIwM2E0OS4yOSA0OS4yOSAwIDAxMTguODktMy4yODYgNDcuNzIzIDQ3LjcyMyAwIDAxMTYuNDI2IDIuNjYxbDI3Ny43NjUgMTA1LjgxN2EzMi4yNjIgMzIuMjYyIDAgMDExOS43MTEgMjguNDE3djMxMi4wOTVhMzYuNTY2IDM2LjU2NiAwIDAxLTE4LjA2OCAyOS44OTZMMzExLjUzNyA3MjguMjZhMzguMDYyIDM4LjA2MiAwIDAxLTE3LjM3OSAzLjg3N2wuMDk4LS4wMzN6Ii8+PHBhdGggZmlsbD0iI0Y3RjdGNyIgZD0iTTU3My4zNjkgMjI0LjM0MkwyOTUuNjA0IDExOC41MjVhNDYuODEzIDQ2LjgxMyAwIDAwLTMwLjQ1NC42MjVMMjEuNjgzIDIyMy43MTdhMjcuMTAxIDI3LjEwMSAwIDAwLTE1LjA3OSAyMi45OTd2MzEyLjA5NWEzMC4zNTUgMzAuMzU1IDAgMDAxNC40NTUgMjQuMjEybDI1OC41NDYgMTM5LjI2MWEzNC42NTkgMzQuNjU5IDAgMDAyOS4wMDggMGwyNjUuNTc2LTEzOS41NTZhMjkuOTY2IDI5Ljk2NiAwIDAwMTQuNTU1LTI0LjA4MVYyNDYuNTVhMjUuNzI3IDI1LjcyNyAwIDAwLTE1LjM3NS0yMi4yMDh6Ii8+PHBhdGggZmlsbD0iI0U1RTVFNiIgZD0iTTI4Ny4xOTMgNDcxLjc4NFY0MDYuMDhhMjkuNTY4IDI5LjU2OCAwIDAwLTEzLjctMjMuNzg1bC01Ljc0OS0zLjEyMS0zOC4xNzQtMjAuNTY1LTEwLjgwOC01LjgxNUwyNy4xMzYgMjQ5LjU3MmMtNy41MjMtNC4wNDEtMTMuNjk5IDAtMTMuNjk5IDkuMDM0djI5NS42NjlhMjkuNTY3IDI5LjU2NyAwIDAwMTMuNjk5IDIzLjc4NWw1Ljc0OSAzLjA4OCAxMjguNTE4IDY5LjIyIDE2LjQyNiA4LjgwNCA5MS43ODkgNDkuMjc4IDQuMDQxIDIuMTY4YzcuNTIzIDQuMDQxIDEzLjY5OSAwIDEzLjY5OS05LjA2N3YtNjUuNzA0YzAtLjY4OSAwLTEuMzgtLjE2NC0yLjA2OVY1ODkuNjljLjE4NC0xLjAyOS4yNzEtMi4wNzQuMjYzLTMuMTIxdi02NS43MDRhMjMuMDQyIDIzLjA0MiAwIDAwLS40Ni00LjIwNXYtNDAuNzdjLjI0NC0xLjM1NC4zMS0yLjczNS4xOTYtNC4xMDZ6Ii8+PHBhdGggZmlsbD0iI0VFRUVFRiIgZD0iTTU2Ny43ODMgMjQ5LjUzOWwtMzYuNTY0IDE5LjIxOS0xNTkuOTkgODQuMDM2LTUuNTg0IDIuOTI0LTQwLjI0NSAyMS4xNTYtMTAuMjgzIDUuNDJhMjkuNTY3IDI5LjU2NyAwIDAwLTE0LjAyNyAyMy43ODV2Mjk1LjY2OGMwIDkuMDM1IDYuMzA5IDEzLjE0MiAxNC4wMjcgOS4wNjdsMTAuMjgzLTUuNDIgMjQyLjM4My0xMjcuMzM1YTI5LjU2NyAyOS41NjcgMCAwMDE0LjAyNy0yMy43ODVWMjU4LjYwNmMtLjEzMS05LjAzNC02LjQzNy0xMy4xMDctMTQuMDI3LTkuMDY3eiIvPjxwYXRoIGZpbGw9IiNGRkYiIGQ9Ik01NTYuNTQ4IDIyMy42ODVsLTY1LjcwNS0yNS4xOTgtOTAuOTAyLTM0LjkyMS0xMy42MzMtNS4yMjQtNDEuMjMtMTUuODM1LTM2LjgyNi0xNC4xOTItMTAuNDgtNC4wMDgtNC42NjUtMS44MDdhMzcuNDUyIDM3LjQ1MiAwIDAwLTI0LjU0MS4zNjFsLTQ5LjA4MSAyMS4xNTctMzcuODc4IDE2LjQyNi01Mi4xMzYgMjIuNDcxLTg2LjM2OSAzNy4yNTQtOS4zOTYgNC4wNDFjLTcuNzg2IDMuMjg1LTkuMDM0IDguOTAzLTIuNjk0IDEyLjMybDcuMjYgMy45MDkgMjcuNDMyIDE0LjgxNiAxMy4xNDEgNy4xMjkgNjcuNTc3IDM2LjQ2NiAyNC43NzEgMTMuMzcxIDEwNS4xMjcgNTYuNzY4YTM4LjA0NSAzOC4wNDUgMCAwMDMxLjczNS42MjVsOC4zNDQtNC4zNyAxMDUuNzUyLTU1LjQ4NyA0NS45OTItMjQuMTEzIDQwLjUwOC0yMS4zMjEgMy4wMjEtMS41NzcgNDIuNzA3LTIyLjM3MiA2LjU3Mi0zLjI4NWM3LjAyOS0zLjgxMiA0Ljk5Mi05Ljc5MS00LjQwMy0xMy40MDR6Ii8+PHBhdGggZmlsbD0iI0U1MDAxMiIgZD0iTTMzNS4wMjUgMjU4LjIxMmMtMjIuNDcxIDExLjA3MS01OS41MjcgMTEuNTY0LTgyLjY4OCAxLjA4NHMtMjMuNDU3LTI3Ljk1OC0uNzIzLTM4LjkzYzIyLjczMy0xMC45NzMgNTkuNDMtMTEuMjY4IDgyLjMyNy0uODU0IDIyLjg5OCAxMC40MTQgMjMuNDI0IDI3LjgyNiAxLjA4NCAzOC43eiIvPjxwYXRoIGZpbGw9IiMyMzE4MTUiIGQ9Ik0xMTQuNDI0IDM5Ny44MDFjMCAxNC45OC0xMC4xODQgMjEuNjQ5LTIyLjczMyAxNC45MTUtMTIuNTUtNi43MzUtMjIuNzAxLTI0LjI3OC0yMi43MDEtMzkuMjI2czEwLjE1MS0yMS42NDkgMjIuNzAxLTE0Ljk0OGMxMi41NDkgNi43MDIgMjIuNzMzIDI0LjI3OCAyMi43MzMgMzkuMjU5em0xMTEuOTkzIDE5My4xMzdjMCAxNS4wNDYtMTAuMjgzIDIxLjY4My0yMi45OTcgMTQuODE2LTEyLjcxMy02Ljg2Ni0yMi45OTYtMjQuNTczLTIyLjk5Ni0zOS40MjMgMC0xNC44NDkgMTAuMjUtMjEuNjQ5IDIyLjk5Ni0xNC44NDkgMTIuNzQ3IDYuODAxIDIyLjk5NyAyNC4zNzcgMjIuOTk3IDM5LjQ1NnpNMzk4LjcyNiA0MjcuMjdjMCAxNS4xNzctMTAuNDE0IDMzLjExNC0yMy4yNiA0MC4wNzktMTIuODQ0IDYuOTY1LTIzLjE2LjMyOC0yMy4xNi0xNC44MTZzMTAuMzgxLTMzLjA0OSAyMy4xNi00MC4wNDdjMTIuNzgtNi45OTggMjMuMjYtLjM5NSAyMy4yNiAxNC43ODR6bTY2LjY1NiA0Mi4zNDVjMCAxNS4yNDQtMTAuNTEyIDMzLjI3OS0yMy40ODggNDAuMjExcy0yMy40MjQuMjMtMjMuNDI0LTE0Ljk0NyAxMC40OC0zMy4xODEgMjMuNDI0LTQwLjE3OWMxMi45NDMtNi45OTcgMjMuNDg4LS4zOTMgMjMuNDg4IDE0LjkxNXptNjcuNDE0IDQyLjc0MWMwIDE1LjM0Mi0xMC42NDUgMzMuNDEtMjMuNzUyIDQwLjM0Mi0xMy4xMDkgNi45MzItMjMuNjU0IDAtMjMuNjU0LTE1LjExMSAwLTE1LjExMiAxMC41NzgtMzMuMzEzIDIzLjY1NC00MC4zMSAxMy4wNzUtNi45OTggMjMuNzUyLS4yNjMgMjMuNzUyIDE1LjA3OXoiLz48L3N2Zz4K" alt="SVG プレビュー" loading="lazy"></div><p class="main-code-preview-status" role="status" hidden></p><details class="main-code-preview-source"><summary>コードを表示</summary><pre><code>&lt;svg xmlns=&quot;http://www.w3.org/2000/svg&quot; viewBox=&quot;0 0 595.281 841.891&quot;&gt;&lt;path fill=&quot;#B4B4B5&quot; d=&quot;M294.256 732.104a38.273 38.273 0 01-17.806-4.041L17.904 588.803A36.99 36.99 0 010 558.809V246.714a33.672 33.672 0 0119.153-28.943L262.62 113.203a49.29 49.29 0 0118.89-3.286 47.723 47.723 0 0116.426 2.661l277.765 105.817a32.262 32.262 0 0119.711 28.417v312.095a36.566 36.566 0 01-18.068 29.896L311.537 728.26a38.062 38.062 0 01-17.379 3.877l.098-.033z&quot;/&gt;&lt;path fill=&quot;#F7F7F7&quot; d=&quot;M573.369 224.342L295.604 118.525a46.813 46.813 0 00-30.454.625L21.683 223.717a27.101 27.101 0 00-15.079 22.997v312.095a30.355 30.355 0 0014.455 24.212l258.546 139.261a34.659 34.659 0 0029.008 0l265.576-139.556a29.966 29.966 0 0014.555-24.081V246.55a25.727 25.727 0 00-15.375-22.208z&quot;/&gt;&lt;path fill=&quot;#E5E5E6&quot; d=&quot;M287.193 471.784V406.08a29.568 29.568 0 00-13.7-23.785l-5.749-3.121-38.174-20.565-10.808-5.815L27.136 249.572c-7.523-4.041-13.699 0-13.699 9.034v295.669a29.567 29.567 0 0013.699 23.785l5.749 3.088 128.518 69.22 16.426 8.804 91.789 49.278 4.041 2.168c7.523 4.041 13.699 0 13.699-9.067v-65.704c0-.689 0-1.38-.164-2.069V589.69c.184-1.029.271-2.074.263-3.121v-65.704a23.042 23.042 0 00-.46-4.205v-40.77c.244-1.354.31-2.735.196-4.106z&quot;/&gt;&lt;path fill=&quot;#EEEEEF&quot; d=&quot;M567.783 249.539l-36.564 19.219-159.99 84.036-5.584 2.924-40.245 21.156-10.283 5.42a29.567 29.567 0 00-14.027 23.785v295.668c0 9.035 6.309 13.142 14.027 9.067l10.283-5.42 242.383-127.335a29.567 29.567 0 0014.027-23.785V258.606c-.131-9.034-6.437-13.107-14.027-9.067z&quot;/&gt;&lt;path fill=&quot;#FFF&quot; d=&quot;M556.548 223.685l-65.705-25.198-90.902-34.921-13.633-5.224-41.23-15.835-36.826-14.192-10.48-4.008-4.665-1.807a37.452 37.452 0 00-24.541.361l-49.081 21.157-37.878 16.426-52.136 22.471-86.369 37.254-9.396 4.041c-7.786 3.285-9.034 8.903-2.694 12.32l7.26 3.909 27.432 14.816 13.141 7.129 67.577 36.466 24.771 13.371 105.127 56.768a38.045 38.045 0 0031.735.625l8.344-4.37 105.752-55.487 45.992-24.113 40.508-21.321 3.021-1.577 42.707-22.372 6.572-3.285c7.029-3.812 4.992-9.791-4.403-13.404z&quot;/&gt;&lt;path fill=&quot;#E50012&quot; d=&quot;M335.025 258.212c-22.471 11.071-59.527 11.564-82.688 1.084s-23.457-27.958-.723-38.93c22.733-10.973 59.43-11.268 82.327-.854 22.898 10.414 23.424 27.826 1.084 38.7z&quot;/&gt;&lt;path fill=&quot;#231815&quot; d=&quot;M114.424 397.801c0 14.98-10.184 21.649-22.733 14.915-12.55-6.735-22.701-24.278-22.701-39.226s10.151-21.649 22.701-14.948c12.549 6.702 22.733 24.278 22.733 39.259zm111.993 193.137c0 15.046-10.283 21.683-22.997 14.816-12.713-6.866-22.996-24.573-22.996-39.423 0-14.849 10.25-21.649 22.996-14.849 12.747 6.801 22.997 24.377 22.997 39.456zM398.726 427.27c0 15.177-10.414 33.114-23.26 40.079-12.844 6.965-23.16.328-23.16-14.816s10.381-33.049 23.16-40.047c12.78-6.998 23.26-.395 23.26 14.784zm66.656 42.345c0 15.244-10.512 33.279-23.488 40.211s-23.424.23-23.424-14.947 10.48-33.181 23.424-40.179c12.943-6.997 23.488-.393 23.488 14.915zm67.414 42.741c0 15.342-10.645 33.41-23.752 40.342-13.109 6.932-23.654 0-23.654-15.111 0-15.112 10.578-33.313 23.654-40.31 13.075-6.998 23.752-.263 23.752 15.079z&quot;/&gt;&lt;/svg&gt;
+</code></pre></details></section>
+<div class="main-embed"><div class="main-embed-frame"><iframe src="https://www.youtube.com/embed/B74K2b7IZDw" title="YouTube 動画" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div><p class="main-embed-source"><a href="https://www.youtube.com/watch?v=B74K2b7IZDw" target="_blank" rel="noopener noreferrer">YouTubeで開く ↗</a></p></div>
+<div class="main-embed main-embed-instagram"><iframe src="https://www.instagram.com/p/DS4OOh9CXo0/embed/" title="Instagram 投稿" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe><p class="main-embed-source"><a href="https://www.instagram.com/p/DS4OOh9CXo0/" target="_blank" rel="noopener noreferrer">Instagramで開く ↗</a></p></div>
+<div class="main-embed main-embed-instagram"><iframe src="https://www.instagram.com/p/DdN-lNLCWtm/embed/" title="Instagram 投稿" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe><p class="main-embed-source"><a href="https://www.instagram.com/junichi.watanuki/p/DdN-lNLCWtm/?img_index=7" target="_blank" rel="noopener noreferrer">Instagramで開く ↗</a></p></div>
+<div class="main-embed"><blockquote class="twitter-tweet"><a href="https://x.com/j_watanuki/status/2107102704682344583">Xの投稿を表示</a></blockquote><script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script><p class="main-embed-source"><a href="https://x.com/j_watanuki/status/2107102704682344583" target="_blank" rel="noopener noreferrer">Xで開く ↗</a></p></div>
+<div class="main-embed main-embed-garmin"><iframe src="https://connect.garmin.com/embed/activity/25084785219" title="Garmin Connect アクティビティ" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe><p class="main-embed-source"><a href="https://connect.garmin.com/app/activity/25084785219" target="_blank" rel="noopener noreferrer">Garmin Connectで開く ↗</a></p></div>
+<div class="main-embed"><div class="main-embed-frame"><iframe src="https://www.slideshare.net/slideshow/embed_code/41306350" title="SlideShare スライド" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div><p class="main-embed-source"><a href="https://www.slideshare.net/slideshow/ss-41306350/41306350" target="_blank" rel="noopener noreferrer">SlideShareで開く ↗</a></p></div>
+  <h1 id="myText">こんにちは！</h1>
+  <button id="myButton">ボタンを押してね</button>
+
+  <script>
+    // 要素を取得する
+    const textElement = document.getElementById('myText');
+    const buttonElement = document.getElementById('myButton');
+
+    // ボタンがクリックされたときの処理
+    buttonElement.addEventListener('click', () => {
+      textElement.textContent = 'ボタンが押されました！';
+    });
+  </script>
+
+<pre lang="stl" data-syntax-highlight="glsyntax1aa353c5845925df4cf9874c452e16151fcef8cdbcce856bd37fb3fb61c3aeae"><code>solid STLB ATF 2.0.0.9000 COLOR=����                                                  
+ facet normal 0 -1 0
+  outer loop
+   vertex 0 0 -23.670000076293945
+   vertex 20.498821258544922 0 11.835000038146973
+   vertex -20.498821258544922 0 11.835000038146973
+  endloop
+ endfacet
+ facet normal 0.816511631011963 0.333284080028534 -0.471413224935532
+  outer loop
+   vertex 20.498821258544922 0 11.835000038146973
+   vertex 0 0 -23.670000076293945
+   vertex 0 33.479999542236328 0
+  endloop
+ endfacet
+ facet normal -0.816511631011963 0.333284080028534 -0.471413224935532
+  outer loop
+   vertex 0 0 -23.670000076293945
+   vertex -20.498821258544922 0 11.835000038146973
+   vertex 0 33.479999542236328 0
+  endloop
+ endfacet
+ facet normal -0 0.333284080028534 0.942826449871063
+  outer loop
+   vertex -20.498821258544922 0 11.835000038146973
+   vertex 20.498821258544922 0 11.835000038146973
+   vertex 0 33.479999542236328 0
+  endloop
+ endfacet
+endsolid
+</code></pre>
+<section class="main-code-preview" data-preview="stl"><div class="main-code-preview-display"></div><p class="main-code-preview-status" role="status" hidden></p><details class="main-code-preview-source"><summary>コードを表示</summary><pre><code>solid STLB ATF 2.0.0.9000 COLOR=����                                                  
+ facet normal 1 0 0
+  outer loop
+   vertex 14.5 0 14.5
+   vertex 14.5 0 -14.5
+   vertex 14.5 29 14.5
+  endloop
+ endfacet
+ facet normal 1 0 0
+  outer loop
+   vertex 14.5 29 14.5
+   vertex 14.5 0 -14.5
+   vertex 14.5 29 -14.5
+  endloop
+ endfacet
+ facet normal 0 0 1
+  outer loop
+   vertex -14.5 0 14.5
+   vertex 14.5 0 14.5
+   vertex -14.5 29 14.5
+  endloop
+ endfacet
+ facet normal 0 0 1
+  outer loop
+   vertex -14.5 29 14.5
+   vertex 14.5 0 14.5
+   vertex 14.5 29 14.5
+  endloop
+ endfacet
+ facet normal -1 0 0
+  outer loop
+   vertex -14.5 0 -14.5
+   vertex -14.5 0 14.5
+   vertex -14.5 29 -14.5
+  endloop
+ endfacet
+ facet normal -1 0 0
+  outer loop
+   vertex -14.5 29 -14.5
+   vertex -14.5 0 14.5
+   vertex -14.5 29 14.5
+  endloop
+ endfacet
+ facet normal 0 0 -1
+  outer loop
+   vertex 14.5 0 -14.5
+   vertex -14.5 0 -14.5
+   vertex 14.5 29 -14.5
+  endloop
+ endfacet
+ facet normal 0 0 -1
+  outer loop
+   vertex 14.5 29 -14.5
+   vertex -14.5 0 -14.5
+   vertex -14.5 29 -14.5
+  endloop
+ endfacet
+ facet normal 0 1 0
+  outer loop
+   vertex -14.5 29 -14.5
+   vertex -14.5 29 14.5
+   vertex 14.5 29 -14.5
+  endloop
+ endfacet
+ facet normal 0 1 0
+  outer loop
+   vertex 14.5 29 -14.5
+   vertex -14.5 29 14.5
+   vertex 14.5 29 14.5
+  endloop
+ endfacet
+ facet normal 0 -1 0
+  outer loop
+   vertex -14.5 0 -14.5
+   vertex 14.5 0 -14.5
+   vertex -14.5 0 14.5
+  endloop
+ endfacet
+ facet normal 0 -1 0
+  outer loop
+   vertex -14.5 0 14.5
+   vertex 14.5 0 -14.5
+   vertex 14.5 0 14.5
+  endloop
+ endfacet
+endsolid
+</code></pre></details></section>
+<pre lang="stl" data-syntax-highlight="glsyntax1aa353c5845925df4cf9874c452e16151fcef8cdbcce856bd37fb3fb61c3aeae"><code>solid STLB ATF 2.0.0.9000 COLOR=����                                                  
+ facet normal 0 0.5734623670578 0.819231927394867
+  outer loop
+   vertex 17.5 0 17.5
+   vertex 0 25 0
+   vertex -17.5 0 17.5
+  endloop
+ endfacet
+ facet normal 0.819231927394867 0.5734623670578 0
+  outer loop
+   vertex 17.5 0 17.5
+   vertex 17.5 0 -17.5
+   vertex 0 25 0
+  endloop
+ endfacet
+ facet normal 0 -0.577330648899078 0.816510438919067
+  outer loop
+   vertex -17.5 0 17.5
+   vertex 0 -24.75 0
+   vertex 17.5 0 17.5
+  endloop
+ endfacet
+ facet normal -0.819231927394867 0.5734623670578 0
+  outer loop
+   vertex -17.5 0 17.5
+   vertex 0 25 0
+   vertex -17.5 0 -17.5
+  endloop
+ endfacet
+ facet normal 0 0.5734623670578 -0.819231927394867
+  outer loop
+   vertex -17.5 0 -17.5
+   vertex 0 25 0
+   vertex 17.5 0 -17.5
+  endloop
+ endfacet
+ facet normal 0.816510438919067 -0.577330648899078 0
+  outer loop
+   vertex 17.5 0 -17.5
+   vertex 17.5 0 17.5
+   vertex 0 -24.75 0
+  endloop
+ endfacet
+ facet normal -0.816510438919067 -0.577330648899078 0
+  outer loop
+   vertex -17.5 0 -17.5
+   vertex 0 -24.75 0
+   vertex -17.5 0 17.5
+  endloop
+ endfacet
+ facet normal 0 -0.577330648899078 -0.816510438919067
+  outer loop
+   vertex 0 -24.75 0
+   vertex -17.5 0 -17.5
+   vertex 17.5 0 -17.5
+  endloop
+ endfacet
+endsolid
+
+</code></pre>
+<section class="main-code-preview" data-preview="stl"><div class="main-code-preview-display"></div><p class="main-code-preview-status" role="status" hidden></p><details class="main-code-preview-source"><summary>コードを表示</summary><pre><code>solid STLB ATF 2.0.0.9000 COLOR=����                                                  
+ facet normal 0 1 0
+  outer loop
+   vertex 0 40.080001831054688 15.310000419616699
+   vertex 14.560675621032715 40.080001831054688 4.73105001449585
+   vertex -14.560675621032715 40.080001831054688 4.73105001449585
+  endloop
+ endfacet
+ facet normal 0 1 0
+  outer loop
+   vertex -14.560675621032715 40.080001831054688 4.73105001449585
+   vertex 14.560675621032715 40.080001831054688 4.73105001449585
+   vertex -8.998991966247559 40.080001831054688 -12.386050224304199
+  endloop
+ endfacet
+ facet normal 0 1 0
+  outer loop
+   vertex -8.998991966247559 40.080001831054688 -12.386050224304199
+   vertex 14.560675621032715 40.080001831054688 4.73105001449585
+   vertex 8.998991966247559 40.080001831054688 -12.386050224304199
+  endloop
+ endfacet
+ facet normal 0 -1 0
+  outer loop
+   vertex 0 24.770000457763672 24.770000457763672
+   vertex -23.557670593261719 24.770000457763672 7.654350757598877
+   vertex 23.557670593261719 24.770000457763672 7.654350757598877
+  endloop
+ endfacet
+ facet normal 0 -1 0
+  outer loop
+   vertex 23.557670593261719 24.770000457763672 7.654350757598877
+   vertex -23.557670593261719 24.770000457763672 7.654350757598877
+   vertex -14.559440612792969 24.770000457763672 -20.039350509643555
+  endloop
+ endfacet
+ facet normal 0 -1 0
+  outer loop
+   vertex 23.557670593261719 24.770000457763672 7.654350757598877
+   vertex -14.559440612792969 24.770000457763672 -20.039350509643555
+   vertex 14.559440612792969 24.770000457763672 -20.039350509643555
+  endloop
+ endfacet
+ facet normal -0.525754451751709 0.447134166955948 0.723638892173767
+  outer loop
+   vertex -23.557670593261719 24.770000457763672 7.654350757598877
+   vertex 0 24.770000457763672 24.770000457763672
+   vertex -14.560675621032715 40.080001831054688 4.73105001449585
+  endloop
+ endfacet
+ facet normal -0.525754451751709 0.447134166955948 0.723638892173767
+  outer loop
+   vertex -14.560675621032715 40.080001831054688 4.73105001449585
+   vertex 0 24.770000457763672 24.770000457763672
+   vertex 0 40.080001831054688 15.310000419616699
+  endloop
+ endfacet
+ facet normal 0.525754451751709 0.447134166955948 0.723638892173767
+  outer loop
+   vertex 0 24.770000457763672 24.770000457763672
+   vertex 23.557670593261719 24.770000457763672 7.654350757598877
+   vertex 0 40.080001831054688 15.310000419616699
+  endloop
+ endfacet
+ facet normal 0.525754451751709 0.447134166955948 0.723638892173767
+  outer loop
+   vertex 0 40.080001831054688 15.310000419616699
+   vertex 23.557670593261719 24.770000457763672 7.654350757598877
+   vertex 14.560675621032715 40.080001831054688 4.73105001449585
+  endloop
+ endfacet
+ facet normal 0.850688576698303 0.447134166955948 -0.276405483484268
+  outer loop
+   vertex 23.557670593261719 24.770000457763672 7.654350757598877
+   vertex 14.559440612792969 24.770000457763672 -20.039350509643555
+   vertex 14.560675621032715 40.080001831054688 4.73105001449585
+  endloop
+ endfacet
+ facet normal 0.850688576698303 0.447134166955948 -0.276405483484268
+  outer loop
+   vertex 14.560675621032715 40.080001831054688 4.73105001449585
+   vertex 14.559440612792969 24.770000457763672 -20.039350509643555
+   vertex 8.998991966247559 40.080001831054688 -12.386050224304199
+  endloop
+ endfacet
+ facet normal 0 0.447134166955948 -0.894466876983643
+  outer loop
+   vertex 14.559440612792969 24.770000457763672 -20.039350509643555
+   vertex -14.559440612792969 24.770000457763672 -20.039350509643555
+   vertex 8.998991966247559 40.080001831054688 -12.386050224304199
+  endloop
+ endfacet
+ facet normal 0 0.447134166955948 -0.894466876983643
+  outer loop
+   vertex 8.998991966247559 40.080001831054688 -12.386050224304199
+   vertex -14.559440612792969 24.770000457763672 -20.039350509643555
+   vertex -8.998991966247559 40.080001831054688 -12.386050224304199
+  endloop
+ endfacet
+ facet normal -0.850688576698303 0.447134166955948 -0.276405483484268
+  outer loop
+   vertex -14.559440612792969 24.770000457763672 -20.039350509643555
+   vertex -23.557670593261719 24.770000457763672 7.654350757598877
+   vertex -8.998991966247559 40.080001831054688 -12.386050224304199
+  endloop
+ endfacet
+ facet normal -0.850688576698303 0.447134166955948 -0.276405483484268
+  outer loop
+   vertex -8.998991966247559 40.080001831054688 -12.386050224304199
+   vertex -23.557670593261719 24.770000457763672 7.654350757598877
+   vertex -14.560675621032715 40.080001831054688 4.73105001449585
+  endloop
+ endfacet
+ facet normal 0 -1 0
+  outer loop
+   vertex 0 0 -15.310000419616699
+   vertex 14.560675621032715 0 -4.73105001449585
+   vertex -14.560675621032715 0 -4.73105001449585
+  endloop
+ endfacet
+ facet normal 0 -1 0
+  outer loop
+   vertex -14.560675621032715 0 -4.73105001449585
+   vertex 14.560675621032715 0 -4.73105001449585
+   vertex -8.998991966247559 0 12.386050224304199
+  endloop
+ endfacet
+ facet normal 0 -1 0
+  outer loop
+   vertex -8.998991966247559 0 12.386050224304199
+   vertex 14.560675621032715 0 -4.73105001449585
+   vertex 8.998991966247559 0 12.386050224304199
+  endloop
+ endfacet
+ facet normal 0 1 0
+  outer loop
+   vertex 0 15.310000419616699 -24.770000457763672
+   vertex -23.557670593261719 15.310000419616699 -7.654350757598877
+   vertex 23.557670593261719 15.310000419616699 -7.654350757598877
+  endloop
+ endfacet
+ facet normal 0 1 0
+  outer loop
+   vertex 23.557670593261719 15.310000419616699 -7.654350757598877
+   vertex -23.557670593261719 15.310000419616699 -7.654350757598877
+   vertex -14.559440612792969 15.310000419616699 20.039350509643555
+  endloop
+ endfacet
+ facet normal 0 1 0
+  outer loop
+   vertex 23.557670593261719 15.310000419616699 -7.654350757598877
+   vertex -14.559440612792969 15.310000419616699 20.039350509643555
+   vertex 14.559440612792969 15.310000419616699 20.039350509643555
+  endloop
+ endfacet
+ facet normal 0.525754451751709 -0.447134166955948 -0.723638892173767
+  outer loop
+   vertex 0 15.310000419616699 -24.770000457763672
+   vertex 23.557670593261719 15.310000419616699 -7.654350757598877
+   vertex 0 0 -15.310000419616699
+  endloop
+ endfacet
+ facet normal 0.525754451751709 -0.447134166955948 -0.723638892173767
+  outer loop
+   vertex 0 0 -15.310000419616699
+   vertex 23.557670593261719 15.310000419616699 -7.654350757598877
+   vertex 14.560675621032715 0 -4.73105001449585
+  endloop
+ endfacet
+ facet normal -0.525754451751709 -0.447134166955948 -0.723638892173767
+  outer loop
+   vertex -23.557670593261719 15.310000419616699 -7.654350757598877
+   vertex 0 15.310000419616699 -24.770000457763672
+   vertex -14.560675621032715 0 -4.73105001449585
+  endloop
+ endfacet
+ facet normal -0.525754451751709 -0.447134166955948 -0.723638892173767
+  outer loop
+   vertex -14.560675621032715 0 -4.73105001449585
+   vertex 0 15.310000419616699 -24.770000457763672
+   vertex 0 0 -15.310000419616699
+  endloop
+ endfacet
+ facet normal -0.850688576698303 -0.447134166955948 0.276405483484268
+  outer loop
+   vertex -14.559440612792969 15.310000419616699 20.039350509643555
+   vertex -23.557670593261719 15.310000419616699 -7.654350757598877
+   vertex -8.998991966247559 0 12.386050224304199
+  endloop
+ endfacet
+ facet normal -0.850688576698303 -0.447134166955948 0.276405483484268
+  outer loop
+   vertex -8.998991966247559 0 12.386050224304199
+   vertex -23.557670593261719 15.310000419616699 -7.654350757598877
+   vertex -14.560675621032715 0 -4.73105001449585
+  endloop
+ endfacet
+ facet normal 0 -0.447134166955948 0.894466876983643
+  outer loop
+   vertex 14.559440612792969 15.310000419616699 20.039350509643555
+   vertex -14.559440612792969 15.310000419616699 20.039350509643555
+   vertex 8.998991966247559 0 12.386050224304199
+  endloop
+ endfacet
+ facet normal -0 -0.447134166955948 0.894466876983643
+  outer loop
+   vertex 8.998991966247559 0 12.386050224304199
+   vertex -14.559440612792969 15.310000419616699 20.039350509643555
+   vertex -8.998991966247559 0 12.386050224304199
+  endloop
+ endfacet
+ facet normal 0.850688576698303 -0.447134166955948 0.276405483484268
+  outer loop
+   vertex 23.557670593261719 15.310000419616699 -7.654350757598877
+   vertex 14.559440612792969 15.310000419616699 20.039350509643555
+   vertex 14.560675621032715 0 -4.73105001449585
+  endloop
+ endfacet
+ facet normal 0.850688576698303 -0.447134166955948 0.276405483484268
+  outer loop
+   vertex 14.560675621032715 0 -4.73105001449585
+   vertex 14.559440612792969 15.310000419616699 20.039350509643555
+   vertex 8.998991966247559 0 12.386050224304199
+  endloop
+ endfacet
+ facet normal -0 1 -0
+  outer loop
+   vertex -14.559440612792969 24.770000457763672 -20.039350509643555
+   vertex -23.557670593261719 24.770000457763672 7.654350757598877
+   vertex 14.559440612792969 24.770000457763672 -20.039350509643555
+  endloop
+ endfacet
+ facet normal -0 1 -0
+  outer loop
+   vertex 14.559440612792969 24.770000457763672 -20.039350509643555
+   vertex -23.557670593261719 24.770000457763672 7.654350757598877
+   vertex -0.000000000000004 24.770000457763672 24.770000457763672
+  endloop
+ endfacet
+ facet normal 0 1 0
+  outer loop
+   vertex 14.559440612792969 24.770000457763672 -20.039350509643555
+   vertex -0.000000000000004 24.770000457763672 24.770000457763672
+   vertex 23.557670593261719 24.770000457763672 7.654350757598877
+  endloop
+ endfacet
+ facet normal 0.850621223449707 -0.447290569543839 0.276359766721725
+  outer loop
+   vertex 14.559440612792969 15.310000419616699 20.039350509643555
+   vertex 23.557170867919922 15.31020450592041 -7.654868125915527
+   vertex 23.557670593261719 24.770000457763672 7.654350757598877
+  endloop
+ endfacet
+ facet normal 0.85063511133194 0.447246581315994 -0.276388108730316
+  outer loop
+   vertex 23.557670593261719 24.770000457763672 7.654350757598877
+   vertex 23.557170867919922 15.31020450592041 -7.654868125915527
+   vertex 14.559440612792969 24.770000457763672 -20.039350509643555
+  endloop
+ endfacet
+ facet normal 0.525716364383698 -0.447261840105057 -0.723587691783905
+  outer loop
+   vertex 23.557170867919922 15.31020450592041 -7.654868125915527
+   vertex 0 15.310000419616699 -24.770000457763672
+   vertex 14.559440612792969 24.770000457763672 -20.039350509643555
+  endloop
+ endfacet
+ facet normal -0 0.447262674570084 -0.894402623176575
+  outer loop
+   vertex 14.559440612792969 24.770000457763672 -20.039350509643555
+   vertex 0 15.310000419616699 -24.770000457763672
+   vertex -14.559440612792969 24.770000457763672 -20.039350509643555
+  endloop
+ endfacet
+ facet normal -0.525716662406921 -0.447262674570084 -0.723586916923523
+  outer loop
+   vertex 0 15.310000419616699 -24.770000457763672
+   vertex -23.557670593261719 15.310000419616699 -7.654350757598877
+   vertex -14.559440612792969 24.770000457763672 -20.039350509643555
+  endloop
+ endfacet
+ facet normal 0.525716662406921 0.447262674570084 0.723586916923523
+  outer loop
+   vertex 23.557670593261719 24.770000457763672 7.654350757598877
+   vertex -0.000000000000004 24.770000457763672 24.770000457763672
+   vertex 14.559440612792969 15.310000419616699 20.039350509643555
+  endloop
+ endfacet
+ facet normal -0 -0.447262674570084 0.894402623176575
+  outer loop
+   vertex -14.559440612792969 15.310000419616699 20.039350509643555
+   vertex 14.559440612792969 15.310000419616699 20.039350509643555
+   vertex -0.000000000000004 24.770000457763672 24.770000457763672
+  endloop
+ endfacet
+ facet normal -0.850627481937408 0.447262674570084 -0.276385605335236
+  outer loop
+   vertex -23.557670593261719 15.310000419616699 -7.654350757598877
+   vertex -23.557670593261719 24.770000457763672 7.654350757598877
+   vertex -14.559440612792969 24.770000457763672 -20.039350509643555
+  endloop
+ endfacet
+ facet normal -0.850627481937408 -0.447262674570084 0.276385605335236
+  outer loop
+   vertex -23.557670593261719 24.770000457763672 7.654350757598877
+   vertex -23.557670593261719 15.310000419616699 -7.654350757598877
+   vertex -14.559440612792969 15.310000419616699 20.039350509643555
+  endloop
+ endfacet
+ facet normal -0.525716662406921 0.447262674570084 0.723586916923523
+  outer loop
+   vertex -14.559440612792969 15.310000419616699 20.039350509643555
+   vertex -0.000000000000004 24.770000457763672 24.770000457763672
+   vertex -23.557670593261719 24.770000457763672 7.654350757598877
+  endloop
+ endfacet
+ facet normal 0.000004343776254 -1 0.000005978695299
+  outer loop
+   vertex 0 15.310000419616699 -24.770000457763672
+   vertex 23.557170867919922 15.31020450592041 -7.654868125915527
+   vertex -23.557670593261719 15.310000419616699 -7.654350757598877
+  endloop
+ endfacet
+ facet normal 0.000004343695309 -1 -0.000001411352059
+  outer loop
+   vertex -23.557670593261719 15.310000419616699 -7.654350757598877
+   vertex 23.557170867919922 15.31020450592041 -7.654868125915527
+   vertex -14.559440612792969 15.310000419616699 20.039350509643555
+  endloop
+ endfacet
+ facet normal -0 -1 -0.000007389745406
+  outer loop
+   vertex -14.559440612792969 15.310000419616699 20.039350509643555
+   vertex 23.557170867919922 15.31020450592041 -7.654868125915527
+   vertex 14.559440612792969 15.310000419616699 20.039350509643555
+  endloop
+ endfacet
+endsolid
+
+</code></pre></details></section>
+<pre lang="stl" data-syntax-highlight="glsyntax1aa353c5845925df4cf9874c452e16151fcef8cdbcce856bd37fb3fb61c3aeae"><code>solid STLB ATF 2.0.0.9000 COLOR=����                                                  
+ facet normal 0 0.794673979282379 -0.607036411762238
+  outer loop
+   vertex 13.001810073852539 22.100000381469727 -17.895456314086914
+   vertex -13.001810073852539 22.100000381469727 -17.895456314086914
+   vertex 0 35.770000457763672 0
+  endloop
+ endfacet
+ facet normal -0.934142589569092 0.187756255269051 -0.303521335124969
+  outer loop
+   vertex -21.037370681762695 22.100000381469727 6.835455894470215
+   vertex -13.001810073852539 22.100000381469727 -17.895456314086914
+   vertex -21.037370681762695 0 -6.835455894470215
+  endloop
+ endfacet
+ facet normal -0.577325940132141 0.794673979282379 -0.187584578990936
+  outer loop
+   vertex -21.037370681762695 22.100000381469727 6.835455894470215
+   vertex 0 35.770000457763672 0
+   vertex -13.001810073852539 22.100000381469727 -17.895456314086914
+  endloop
+ endfacet
+ facet normal 0 0.187756255269051 -0.982215642929077
+  outer loop
+   vertex 13.001810073852539 22.100000381469727 -17.895456314086914
+   vertex 0 0 -22.120000839233398
+   vertex -13.001810073852539 22.100000381469727 -17.895456314086914
+  endloop
+ endfacet
+ facet normal 0.577325940132141 0.794673979282379 -0.187584578990936
+  outer loop
+   vertex 13.001810073852539 22.100000381469727 -17.895456314086914
+   vertex 0 35.770000457763672 0
+   vertex 21.037370681762695 22.100000381469727 6.835455894470215
+  endloop
+ endfacet
+ facet normal -0.356807053089142 0.794673979282379 0.491102784872055
+  outer loop
+   vertex 0 22.100000381469727 22.120000839233398
+   vertex 0 35.770000457763672 0
+   vertex -21.037370681762695 22.100000381469727 6.835455894470215
+  endloop
+ endfacet
+ facet normal -0.577331900596619 -0.187756255269051 -0.794629156589508
+  outer loop
+   vertex -21.037370681762695 0 -6.835455894470215
+   vertex -13.001810073852539 22.100000381469727 -17.895456314086914
+   vertex 0 0 -22.120000839233398
+  endloop
+ endfacet
+ facet normal 0.356807053089142 0.794673979282379 0.491102784872055
+  outer loop
+   vertex 21.037370681762695 22.100000381469727 6.835455894470215
+   vertex 0 35.770000457763672 0
+   vertex 0 22.100000381469727 22.120000839233398
+  endloop
+ endfacet
+ facet normal 0.577331900596619 -0.187756255269051 -0.794629156589508
+  outer loop
+   vertex 0 0 -22.120000839233398
+   vertex 13.001810073852539 22.100000381469727 -17.895456314086914
+   vertex 21.037370681762695 0 -6.835455894470215
+  endloop
+ endfacet
+ facet normal -0.577325940132141 -0.794673979282379 0.187584578990936
+  outer loop
+   vertex -13.001810073852539 0 17.895456314086914
+   vertex -21.037370681762695 0 -6.835455894470215
+   vertex 0 -13.670000076293945 0
+  endloop
+ endfacet
+ facet normal -0.356807053089142 -0.794673979282379 -0.491102784872055
+  outer loop
+   vertex 0 -13.670000076293945 0
+   vertex -21.037370681762695 0 -6.835455894470215
+   vertex 0 0 -22.120000839233398
+  endloop
+ endfacet
+ facet normal -0.934142589569092 -0.187756255269051 0.303521335124969
+  outer loop
+   vertex -13.001810073852539 0 17.895456314086914
+   vertex -21.037370681762695 22.100000381469727 6.835455894470215
+   vertex -21.037370681762695 0 -6.835455894470215
+  endloop
+ endfacet
+ facet normal 0.356807053089142 -0.794673979282379 -0.491102784872055
+  outer loop
+   vertex 0 0 -22.120000839233398
+   vertex 21.037370681762695 0 -6.835455894470215
+   vertex 0 -13.670000076293945 0
+  endloop
+ endfacet
+ facet normal -0.577331900596619 0.187756255269051 0.794629156589508
+  outer loop
+   vertex -13.001810073852539 0 17.895456314086914
+   vertex 0 22.100000381469727 22.120000839233398
+   vertex -21.037370681762695 22.100000381469727 6.835455894470215
+  endloop
+ endfacet
+ facet normal 0.577331900596619 0.187756255269051 0.794629156589508
+  outer loop
+   vertex 21.037370681762695 22.100000381469727 6.835455894470215
+   vertex 0 22.100000381469727 22.120000839233398
+   vertex 13.001810073852539 0 17.895456314086914
+  endloop
+ endfacet
+ facet normal -0 -0.187756255269051 0.982215642929077
+  outer loop
+   vertex -13.001810073852539 0 17.895456314086914
+   vertex 13.001810073852539 0 17.895456314086914
+   vertex 0 22.100000381469727 22.120000839233398
+  endloop
+ endfacet
+ facet normal 0.934142589569092 0.187756255269051 -0.303521335124969
+  outer loop
+   vertex 21.037370681762695 0 -6.835455894470215
+   vertex 13.001810073852539 22.100000381469727 -17.895456314086914
+   vertex 21.037370681762695 22.100000381469727 6.835455894470215
+  endloop
+ endfacet
+ facet normal 0.934142589569092 -0.187756255269051 0.303521335124969
+  outer loop
+   vertex 21.037370681762695 22.100000381469727 6.835455894470215
+   vertex 13.001810073852539 0 17.895456314086914
+   vertex 21.037370681762695 0 -6.835455894470215
+  endloop
+ endfacet
+ facet normal 0.577325940132141 -0.794673979282379 0.187584578990936
+  outer loop
+   vertex 21.037370681762695 0 -6.835455894470215
+   vertex 13.001810073852539 0 17.895456314086914
+   vertex 0 -13.670000076293945 0
+  endloop
+ endfacet
+ facet normal -0 -0.794673979282379 0.607036411762238
+  outer loop
+   vertex 13.001810073852539 0 17.895456314086914
+   vertex -13.001810073852539 0 17.895456314086914
+   vertex 0 -13.670000076293945 0
+  endloop
+ endfacet
+endsolid
+</code></pre>
+<h1 id="ローカル端末での環境構築">ローカル端末での環境構築</h1>
+<h2 id="動作環境のイメージ図">動作環境のイメージ図</h2>
+<p>※ 見た目に違和感がある理由は、新しいもの（Mermaid）で無理やり作図してみたことが原因かも。。。</p>
+<pre lang="mermaid" data-syntax-highlight="glsyntax1aa353c5845925df4cf9874c452e16151fcef8cdbcce856bd37fb3fb61c3aeae"><code>flowchart TD
+  subgraph C[ ]
+    direction LR
+    subgraph 192.168.10.0/24
+        direction TB
+        N101[192.168.10.101]
+        N102[192.168.10.102]
+        N103[192.168.10.103]
+    end
+    subgraph コンテナ
+        direction TB
+        Host1
+        Host2
+        Host3
+    end
+    subgraph 192.168.20.0/24
+        direction TB
+        N201[192.168.20.101]
+        N202[192.168.20.102]
+        N203[192.168.20.103]
+    end
+  end
+  A[操作用端末] --- B{Bridge}
+  B{Bridge} --&gt;|Docker Network| C
+  N101 --- Host1
+  N102 --- Host2
+  N103 --- Host3
+  Host1 --- N201
+  Host2 --- N202
+  Host3 --- N203
+  
+  style A fill:#f9f,stroke:#333,stroke-width:4px
+  style C fill:#eee,stroke:#333,stroke-width:4px
+  style 192.168.10.0/24 fill:#ddd,stroke:#333,stroke-width:4px
+  style 192.168.20.0/24 fill:#ddd,stroke:#333,stroke-width:4px
+  style Host1 fill:#f9f,stroke:#333,stroke-width:4px
+  style Host2 fill:#f9f,stroke:#333,stroke-width:4px
+  style Host3 fill:#f9f,stroke:#333,stroke-width:4px
+  style コンテナ fill:#fee,stroke:#333,stroke-width:4px
+</code></pre>
+<section class="main-code-preview" data-preview="mermaid"><div class="main-code-preview-display"></div><p class="main-code-preview-status" role="status" hidden></p><details class="main-code-preview-source"><summary>コードを表示</summary><pre><code>flowchart TD
+  subgraph C[ ]
+    direction LR
+    subgraph 192.168.10.0/24
+        direction TB
+        N101[192.168.10.101]
+        N102[192.168.10.102]
+        N103[192.168.10.103]
+    end
+    subgraph コンテナ
+        direction TB
+        Host1
+        Host2
+        Host3
+    end
+    subgraph 192.168.20.0/24
+        direction TB
+        N201[192.168.20.101]
+        N202[192.168.20.102]
+        N203[192.168.20.103]
+    end
+  end
+  A[操作用端末] --- B{Bridge}
+  B{Bridge} --&gt;|Docker Network| C
+  N101 --- Host1
+  N102 --- Host2
+  N103 --- Host3
+  Host1 --- N201
+  Host2 --- N202
+  Host3 --- N203
+
+  style A fill:#f9f,stroke:#333,stroke-width:4px
+  style C fill:#eee,stroke:#333,stroke-width:4px
+  style 192.168.10.0/24 fill:#ddd,stroke:#333,stroke-width:4px
+  style 192.168.20.0/24 fill:#ddd,stroke:#333,stroke-width:4px
+  style Host1 fill:#f9f,stroke:#333,stroke-width:4px
+  style Host2 fill:#f9f,stroke:#333,stroke-width:4px
+  style Host3 fill:#f9f,stroke:#333,stroke-width:4px
+  style コンテナ fill:#fee,stroke:#333,stroke-width:4px
+</code></pre></details></section>
+</div>
+        <section class="main-comments" data-comment-post="data/contents/blog/2026-11-14.html" aria-labelledby="site-comments-heading">
+          <div class="main-comments-heading">
+            <span class="main-eyebrow">COMMENTS</span>
+            <h2 id="site-comments-heading">コメント</h2>
+            <p>この記事へのコメントをお寄せください。</p>
+          </div>
+          <div class="main-comments-list">
+            
+          </div>
+          <div class="main-comment-compose">
+            <h3>新しいコメントを投稿</h3>
+            <p id="site-comment-help">GitHubへのログインと、GitHub上でのIssue送信が必要です。コメントは公開されます。ボタンを押しただけでは投稿されません。</p>
+            <noscript><p class="main-comment-notice">コメントフォームの利用にはJavaScriptを有効にしてください。</p></noscript>
+            <form class="main-comment-form" data-comment-form aria-describedby="site-comment-help">
+              <fieldset data-comment-fields disabled>
+                <div class="main-comment-field">
+                  <label for="site-comment-title">タイトル <span>必須</span></label>
+                  <input id="site-comment-title" name="title" type="text" value="[Comment] 個人サイトのリニューアル" required>
+                </div>
+                <div class="main-comment-field">
+                  <label for="site-comment-body">コメント <span>必須</span></label>
+                  <p id="site-comment-markdown-help">Markdown（GitHub Flavored Markdown）が使えます。</p>
+                  <textarea id="site-comment-body" name="comment_body" rows="7" required aria-describedby="site-comment-markdown-help"></textarea>
+                </div>
+                <button class="main-comment-submit" type="submit">GitHubでコメントを投稿 <span aria-hidden="true">↗</span></button>
+                <p class="main-comment-after">新しいタブで入力内容を引き継いだGitHubの画面が開きます。内容を確認し、送信してください。</p>
+              </fieldset>
+              <div class="main-comment-fallback" data-comment-fallback hidden>
+                <h4>入力内容をコピーして投稿</h4>
+                <p>入力内容が長いため、GitHubへ一度に渡せません。入力内容はこのページに残っています。下のリンクでGitHubを開き、タイトル・対象記事パス・コメントをそれぞれコピーして貼り付けてください。</p>
+                <div class="main-comment-field">
+                  <label for="site-comment-path">対象記事パス</label>
+                  <input id="site-comment-path" type="text" data-comment-path readonly>
+                </div>
+                <div class="main-comment-copy-actions">
+                  <button type="button" data-comment-copy="title">タイトルをコピー</button>
+                  <button type="button" data-comment-copy="path">記事パスをコピー</button>
+                  <button type="button" data-comment-copy="body">コメントをコピー</button>
+                </div>
+                <p class="main-comment-copy-status" data-comment-copy-status role="status" aria-live="polite"></p>
+                <a class="main-comment-fallback-link" href="https://github.com/JunichiWatanuki/JunichiWatanuki.github.io/issues/new?template=comment.yaml" target="_blank" rel="noopener noreferrer">GitHubの投稿画面を開く（新しいタブ） ↗</a>
+              </div>
+              <p class="main-comment-error" data-comment-error role="alert" hidden></p>
+            </form>
+          </div>
+        </section>
+        <a class="main-article-back" href="../../../index.html#all-posts">← 記事一覧へ戻る</a>
+      </article>
+    </main>
+    <aside class="main-right-sidebar" aria-label="おすすめとプロフィール">
+      <section class="main-side-section"><span class="main-eyebrow">A LITTLE ABOUT ME</span><h2>このサイトについて</h2><div class="main-profile-art" role="img" aria-label="Junichi WATANUKIのプロフィール写真"></div><p class="main-profile-name">Junichi WATANUKI</p><p class="main-side-copy">思いつきな気ままな日常。<br>忘れてしまってもいいように、<br>日々のあれこれを記録しています。</p><a href="../../../index.html#about" class="main-text-link">MORE ABOUT <span>↗</span></a></section>
+      <section class="main-side-section"><span class="main-eyebrow">PICK UP</span><h2>おすすめの記事</h2><div class="main-popular-list" data-popular-posts></div></section>
+      <section class="main-side-quote"><span>“</span><p>日々の出来事を<br>積み重ねるサイト。</p><small>MOVE AT YOUR OWN PACE.</small></section>
+    </aside>
+  </div>
+  <footer class="main-footer"><div class="main-footer-inner"><div><a class="main-footer-brand" href="../../../index.html">Monolog-jwat<span>BETWEEN THE SEA &amp; THE FOREST</span></a><p>健康管理、日々のこと。</p></div><div class="main-footer-links"><a href="../../../index.html#about">ABOUT</a><a href="../../../index.html#latest">JOURNAL</a><a href="../../../index.html#training">TRAINING</a></div><a class="main-to-top" href="#top" aria-label="ページ上部へ">↑</a></div><section class="main-footer-social" data-social-section hidden aria-label="SNSアカウント"><p class="main-footer-social-title">FIND ME ONLINE</p><nav class="main-social-links" data-social-links aria-label="SNSアカウント"></nav></section><div class="main-footer-bottom"><span>© 2025 Monolog-jwat</span><span>MADE FOR THE EVERYDAY.</span></div></footer>
+</body>
+</html>

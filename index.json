@@ -63,22 +63,6 @@
       "href": "index.html#sample-posts",
       "children": [
         {
-          "label": "2025年4月7日のサンプル",
-          "href": "data/contents/sample/2025-04-07.html"
-        },
-        {
-          "label": "2025年2月5日のサンプル",
-          "href": "data/contents/sample/2025-02-05.html"
-        },
-        {
-          "label": "2025年1月28日のサンプル",
-          "href": "data/contents/sample/2025-01-28.html"
-        },
-        {
-          "label": "2025年1月14日のサンプル",
-          "href": "data/contents/sample/2025-01-14.html"
-        },
-        {
           "label": "2024年12月25日のサンプル",
           "href": "data/contents/sample/2024-12-25.html"
         }
@@ -141,38 +125,6 @@
       "path": "data/contents/training/2026-11-09_19-00-49.html",
       "excerpt": "FITデータに記録されたセッションとラップの記録。",
       "thumbnail": "data/sources/training/thumbnail.jpg"
-    },
-    {
-      "title": "2025年4月7日のサンプル",
-      "date": "2025-04-07",
-      "type": "sample",
-      "path": "data/contents/sample/2025-04-07.html",
-      "excerpt": "サンプルの記録：ランニング、体幹トレーニング、ストレッチ",
-      "thumbnail": "data/sources/sample/thumbnail.jpg"
-    },
-    {
-      "title": "2025年2月5日のサンプル",
-      "date": "2025-02-05",
-      "type": "sample",
-      "path": "data/contents/sample/2025-02-05.html",
-      "excerpt": "サンプルの記録：バイク、ストレッチ",
-      "thumbnail": "data/sources/sample/thumbnail.jpg"
-    },
-    {
-      "title": "2025年1月28日のサンプル",
-      "date": "2025-01-28",
-      "type": "sample",
-      "path": "data/contents/sample/2025-01-28.html",
-      "excerpt": "サンプルの記録：ランニング、プランク",
-      "thumbnail": "data/sources/sample/thumbnail.jpg"
-    },
-    {
-      "title": "2025年1月14日のサンプル",
-      "date": "2025-01-14",
-      "type": "sample",
-      "path": "data/contents/sample/2025-01-14.html",
-      "excerpt": "サンプルの記録：ジョギング、スクワット",
-      "thumbnail": "data/sources/sample/thumbnail.jpg"
     },
     {
       "title": "2024年12月25日のサンプル",
