@@ -1,0 +1,32 @@
+{
+  "issue": {
+    "number": 1,
+    "title": "今日もいつもの。",
+    "body": "### 対象記事パス (Post Path)\n\nhttps://junichiwatanuki.github.io/data/contents/training/2026-11-15_18-40-00.html\n\n### コメント内容 (Comment)\n\n個人サイト更新後の初の泳げるお風呂（コメント投稿テストを兼ねて、、、）",
+    "state": "closed",
+    "created_at": "2026-11-15T16:58:21Z",
+    "updated_at": "2026-11-15T17:00:42Z",
+    "closed_at": "2026-11-15T17:00:42Z",
+    "user": {
+      "login": "JunichiWatanuki"
+    },
+    "labels": [
+      "comment-for-post"
+    ],
+    "html_url": "https://github.com/JunichiWatanuki/JunichiWatanuki.github.io/issues/1"
+  },
+  "post_path": "data/contents/training/2026-11-15_18-40-00.html",
+  "comments": [
+    {
+      "id": 6898048334,
+      "body": "コメント投稿テスト成功。\nよってCloseとする。",
+      "user": {
+        "login": "JunichiWatanuki"
+      },
+      "created_at": "2026-11-15T17:00:42Z",
+      "updated_at": "2026-11-15T17:00:42Z",
+      "html_url": "https://github.com/JunichiWatanuki/JunichiWatanuki.github.io/issues/1#issuecomment-6898048334"
+    }
+  ],
+  "github_run_id": 43738657971
+}
