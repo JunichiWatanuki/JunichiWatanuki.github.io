@@ -29,6 +29,10 @@
               "label": "11月",
               "children": [
                 {
+                  "label": "Swim 2026-11-15 18:40:00 JST",
+                  "href": "data/contents/training/2026-11-15_18-40-00.html"
+                },
+                {
                   "label": "Swim 2026-11-14 19:37:59 JST",
                   "href": "data/contents/training/2026-11-14_19-37-59.html"
                 },
@@ -70,6 +74,14 @@
     }
   ],
   "posts": [
+    {
+      "title": "Swim 2026-11-15 18:40:00 JST",
+      "date": "2026-11-15",
+      "type": "training",
+      "path": "data/contents/training/2026-11-15_18-40-00.html",
+      "excerpt": "FITデータに記録されたセッションとラップの記録。",
+      "thumbnail": "data/sources/training/thumbnail.jpg"
+    },
     {
       "title": "Swim 2026-11-14 19:37:59 JST",
       "date": "2026-11-14",
