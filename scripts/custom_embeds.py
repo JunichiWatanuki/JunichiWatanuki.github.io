@@ -10,9 +10,12 @@ Do not use this module for untrusted issue comments.
 from __future__ import annotations
 
 import base64
+import hashlib
 import html
+import json
 import re
 import secrets
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -21,13 +24,13 @@ from urllib.parse import parse_qs, urlsplit
 SERVICES = frozenset({"youtube", "instagram", "twitter", "garmin", "slideshare"})
 PREVIEWS = {"rawmermaid": "mermaid", "rawstl": "stl", "rawsvg": "svg"}
 HIGHLIGHT_LANGUAGES = frozenset({"mermaid", "stl", "svg"})
-_KINDS = r"rawhtml|rawmermaid|rawstl|rawsvg|youtube|instagram|twitter|garmin|slideshare|mermaid|stl|svg"
+_KINDS = r"rawhtml|rawmermaid|rawstl|rawsvg|youtube|instagram|twitter|garmin|slideshare|mermaid|stl|svg|e2d3"
 # This deliberately marks possible openers rather than parsing Markdown itself:
 # cmark is the authority on whether a marked line really is a fenced block.
 # Prefixes cover nested GFM block quotes, list markers and list continuation
 # indentation. Any mark that cmark leaves as ordinary text is removed afterward.
 _ENTITY = re.compile(r"&(?:#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});")
-_CUSTOM_KINDS = SERVICES | {"rawhtml"} | frozenset(PREVIEWS) | HIGHLIGHT_LANGUAGES
+_CUSTOM_KINDS = SERVICES | {"rawhtml", "e2d3"} | frozenset(PREVIEWS) | HIGHLIGHT_LANGUAGES
 
 
 @dataclass(frozen=True)
@@ -35,6 +38,7 @@ class _Marks:
     prefix: str
     source_lines: dict[int, int]
     line_endings: tuple[str, ...]
+    original_lines: tuple[str, ...]
 
 
 def _info_kind_end(info: str) -> int | None:
@@ -165,7 +169,7 @@ def mark_custom_fences(source: Path):
         pieces.extend((markdown[previous:offset], f"{prefix}{index}z"))
         previous = offset
     pieces.append(markdown[previous:])
-    marks = _Marks(prefix, source_lines, endings)
+    marks = _Marks(prefix, source_lines, endings, tuple(markdown.split("\n")))
     return _MarkdownSource(source, "".join(pieces), marks), marks
 
 
@@ -190,6 +194,39 @@ def _restore_raw_newlines(content: str, marks: _Marks, index: int) -> str:
         result.append(marks.line_endings[line] if line < len(marks.line_endings) else "")
     result.append(parts[-1])
     return "".join(result)
+
+
+def _restore_e2d3_content(content: str, marks: _Marks, index: int) -> str | None:
+    """Reverse cmark's NUL replacement as well as its newline normalization.
+
+    Markdown containers and fence indentation can remove the beginning of a
+    source line. The remainder is a suffix; only restore NULs that can be
+    matched unambiguously against that suffix. If a NUL cannot be accounted
+    for, retain the ordinary code block rather than silently corrupt CSV.
+    """
+    lines = content.split("\n")
+    first_line = marks.source_lines[index] + 1
+    for offset, line in enumerate(lines):
+        source_index = first_line + offset
+        if source_index >= len(marks.original_lines):
+            break
+        source = marks.original_lines[source_index]
+        if "\0" not in source:
+            continue
+        normalized = source.replace("\0", "\ufffd")
+        suffix = 0
+        while (suffix < min(len(line), len(normalized)) and
+               line[-suffix - 1] == normalized[-suffix - 1]):
+            suffix += 1
+        prefix_length = len(source) - suffix
+        if "\0" in source[:prefix_length]:
+            return None
+        chars = list(line)
+        for pos in range(prefix_length, len(source)):
+            if source[pos] == "\0":
+                chars[len(line) - len(source) + pos] = "\0"
+        lines[offset] = "".join(chars)
+    return _restore_raw_newlines("\n".join(lines), marks, index)
 
 
 @dataclass(frozen=True)
@@ -233,6 +270,10 @@ def extract_custom_fences(rendered: str, mark: _Marks | None, syntax_key: str | 
         content = html.unescape(remove_fence_marks(match.group("content"), mark))
         if kind == "rawhtml":
             content = _restore_raw_newlines(content, mark, int(match.group("index")))
+        elif kind == "e2d3":
+            content = _restore_e2d3_content(content, mark, int(match.group("index")))
+            if content is None:
+                return remove_fence_marks(match.group(0), mark)
         embeds.append(_Embed(
             placeholder=placeholder,
             kind=kind,
@@ -393,7 +434,56 @@ def render_code_preview(kind: str, content: str) -> str | None:
             f'<pre><code>{html.escape(content, quote=True)}</code></pre></details></section>')
 
 
-def insert_custom_fences(page: str, embeds) -> str:
+def parse_e2d3(content: str) -> tuple[str, str] | None:
+    """Parse exact section lines and retain the template name and CSV verbatim.
+
+    A template is one safe directory component, never a path. Neither section
+    names nor the directory name are trimmed, and the CSV may be empty. Blank
+    lines between the template name and the data section are permitted.
+    """
+    match = re.fullmatch(r"# template(?:\r\n|\r|\n)([^\r\n]+)(?:\r\n|\r|\n)"
+                         r"(?:[ \t]*(?:\r\n|\r|\n))*# data(?:(?:\r\n|\r|\n)(.*)|$)", content, re.S)
+    if not match:
+        return None
+    template, data = match.group(1), match.group(2) or ""
+    if (not template.strip() or template == "." or ".." in template or
+            re.match(r"^[A-Za-z]:", template) or
+            any(ch in "/\\" or unicodedata.category(ch) == "Cc" for ch in template)):
+        return None
+    return template, data
+
+
+def encode_e2d3(content: str) -> bytes | None:
+    """Encode a recognized fence exactly as both build stages expect."""
+    spec = parse_e2d3(content)
+    if spec is None:
+        return None
+    template, data = spec
+    try:
+        return json.dumps({"template": template, "data": data}, ensure_ascii=False,
+                          sort_keys=True, separators=(",", ":")).encode("utf-8")
+    except UnicodeEncodeError:
+        return None
+
+
+def render_e2d3(content: str, prefix: str = "_e2d3/") -> str | None:
+    """Render a safe reference; the Node build generates the linked HTML later."""
+    encoded = encode_e2d3(content)
+    if encoded is None:
+        return None
+    template, _ = parse_e2d3(content)
+    digest = hashlib.sha256(encoded).hexdigest()
+    serialized = base64.b64encode(encoded).decode("ascii")
+    src = (prefix.rstrip("/") + "/" if prefix else "") + digest + ".html"
+    title = html.escape(f"E2D3: {template}", quote=True)
+    return (f'<section class="main-e2d3" data-e2d3-spec="{serialized}">'
+            f'<iframe class="main-e2d3-frame" src="{html.escape(src, quote=True)}" '
+            f'title="{title}" loading="lazy"></iframe>'
+            '<details class="main-e2d3-source"><summary>データを表示</summary>'
+            f'<pre><code>{html.escape(content, quote=True)}</code></pre></details></section>')
+
+
+def insert_custom_fences(page: str, embeds, e2d3_prefix: str = "_e2d3/") -> str:
     """Insert once, after every other transformation, without re-expansion."""
     if not embeds:
         return page
@@ -408,6 +498,8 @@ def insert_custom_fences(page: str, embeds) -> str:
             return embed.content
         if embed.kind in PREVIEWS:
             replacement = render_code_preview(embed.kind, embed.content)
+        elif embed.kind == "e2d3":
+            replacement = render_e2d3(embed.content, e2d3_prefix)
         else:
             replacement = render_service_embed(embed.kind, embed.content)
         return embed.original if replacement is None else replacement

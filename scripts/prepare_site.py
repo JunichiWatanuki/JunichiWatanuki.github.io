@@ -39,7 +39,8 @@ def prepare(root: Path, site: Path):
         raise ValueError(f"Missing site root index.html: {root / 'index.html'}")
 
     # Copy the published site and external media, not source code or old builds.
-    skip_root = {".git", ".github", "scripts", "TODO.md", ".venv", ".site", "_site", "node_modules", "__pycache__"}
+    skip_root = {".git", ".github", ".gitignore", "scripts", "TODO.md", ".venv", ".site", "_site",
+                 "node_modules", "__pycache__", "package.json", "package-lock.json"}
     for current, dirs, files in os.walk(root):
         here = Path(current)
         rel = here.relative_to(root)

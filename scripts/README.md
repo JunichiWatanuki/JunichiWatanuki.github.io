@@ -2,7 +2,7 @@
 
 ## 投稿と出力
 
-- `data/sources/blog/` の `.md`、`data/sources/training/` の Garmin `.fit`、`data/sources/sample/` の `.csv` を再帰的に読み取り、それぞれ `data/contents/{種別}/` に、iframe を使わない独立 HTML を生成します。拡張子の大文字・小文字は区別しません。サブディレクトリの構造は維持します。
+- `data/sources/blog/` の `.md`、`data/sources/training/` の Garmin `.fit`、`data/sources/sample/` の `.csv` を再帰的に読み取り、それぞれ `data/contents/{種別}/` に独立した記事 HTML を生成します。拡張子の大文字・小文字は区別しません。サブディレクトリの構造は維持します。
 - ブログとサンプルではファイル名の日付は必須ではありません。先頭が実在する `YYYYMMDD` または `YYYY-MM-DD` の場合、その日付を使用し、出力名の日付を `YYYY-MM-DD` に正規化します。後ろに文字列を付けることもできます（例: `20250105-morning.md` → `2025-01-05-morning.html`）。日付がない場合や日付として無効な場合は、元のベース名をそのまま HTML のファイル名にし、日付欄を「日付不明」とします。更新日時など環境依存の値は使いません。
 - ブログのタイトルは先頭の `<!-- title: タイトル -->`、次に最初の H1 見出し、それもない場合は日付（例: `2025-01-05 のブログ`）、日付不明なら拡張子を除いた元のファイル名を使います。本文は `cmarkgfm` の GFM（表、タスクリスト、自動リンクなど）と脚注を静的 HTML に変換し、`nh3` でサニタイズします。見出しには GitHub 風の ID を生成し、同じ見出しは `-1`、`-2` などで区別します。脚注は `[^注]` と `[^注]: 注釈` で記述でき、参照元と脚注の間を往復できます。GitHub のサイト固有機能や、許可されていない生 HTML が完全に同一に再現されるわけではありません。
 - トレーニングの FIT は Garmin 公式 `garmin-fit-sdk` でデコードします。元と同じベース名の `.json` と、JSON 内 `file_id_mesgs.time_created` を日本標準時に変換した `YYYY-MM-DD_HH-MM-SS.html` を `data/contents/training/` に生成します。HTML は元 FIT と生成 JSON の GitHub 上のファイルへのリンク、セッションの概要とアクティブ・ラップの表を表示します。壊れた FIT、日時の欠落、同じ出力先への衝突はエラーです。従来の training CSV は変換せず、処理時にスキップした旨をログに表示します。元ファイルは削除しません。
@@ -39,6 +39,31 @@ https://www.slideshare.net/slideshow/ss-41306350/41306350
 URLは1ブロックにつき1件のHTTPS URLで指定します。元の投稿を開くリンクを併記し、不正または対応していない形式は従来どおりコードとして表示します。Xの埋め込みには公式スクリプトとJavaScriptが必要です。表示には各サービスの公開設定と埋め込み許可が必要で、削除や非公開、認証、広告ブロッカーなどにより表示されない場合があります。Instagramのカルーセルは `img_index` で指定した画像から始まることを保証できません。SlideShareは数値IDの埋め込みURLからサービス側の埋め込みキーへの転送に依存します。転送に対応しない場合は、SlideShareの共有画面で表示される `https://www.slideshare.net/slideshow/embed_code/key/…` を使用してください。外部サービスを表示すると閲覧者のブラウザからそれらのサービスに通信が発生します。
 
 `rawhtml` フェンス内は、スクリプトを含めてHTMLとしてそのままページに挿入します。この機能はリポジトリのMarkdownを編集できる信頼済みの投稿者向けであり、任意のスクリプトがサイトと同じ権限で動作します。信頼できないHTMLを貼り付けないでください。Issueコメントは従来どおりサニタイズされ、`rawhtml` フェンスや埋め込みURLを実行しません。
+
+### e2d3によるデータの可視化
+
+ブログ記事の `e2d3` フェンスでは、`# template` の次の行に [e2d3-contrib](https://github.com/e2d3/e2d3-contrib) のディレクトリ名を記述し、`# data` の次の行からCSVを記述します。セクション間に空行を入れることもできます。
+
+````markdown
+```e2d3
+# template
+bipartite-graph-original
+
+# data
+男子,女子,,
+年代階級,完泳時間,男子,女子
+高校生,02:00～02:14,2,1
+高校生,02:15～02:29,3,1
+```
+````
+
+`bipartite-graph-original` のCSVは1行目に2つの図のタイトル、2行目に4列の見出し、3行目以降に「左カテゴリ、右カテゴリ、1つ目の数値、2つ目の数値」を指定します。各カテゴリの組み合わせは重複させず、数値は有限の0以上の値にしてください。左カテゴリは23種類までです。公式テンプレートには先頭の明細行を読み飛ばす問題があるため、生成時に読み飛ばし用の行を追加して、元の明細をすべて反映します。
+
+入力が空、CSVの構文や検証可能な形式に不適合の場合、公式テンプレートの既定データを使用し、図の近くにその旨を表示します。`bipartite-graph-original`、`multi-series-line-chart`、`piechart-javascript` はテンプレート固有の形式も検証します。それ以外は主に既定データの列数と数値列から推定した簡易判定です。テンプレートごとにデータの意味や必要なライブラリが異なり、公式には統一された検証スキーマがないため、**すべての不適合を判定して既定データに切り替えることはできません**。入力が受理されても図が正しく表示されない場合があるため、テンプレートの説明と表示結果を確認してください。
+
+GitHub Actionsとローカルビルドは、公式e2d3 0.6.4のブラウザ用ランタイムと固定コミット `d48bd8256e95cfcc393d37e3e7769000dd738fc9` のe2d3-contribをビルド時に取得し、図ごとのHTMLと必要なファイルを `data/contents/blog/_e2d3/` に生成します。`main.js` を持つ公式テンプレートを対象としますが、追加の依存設定、既定データの形式、外部データなどの理由で利用できないものもあります。使用できない場合はビルドを失敗させ、理由をログに表示します。1サイトにつき異なるグラフは100件、1件の入力は2 MiBまでです。
+
+稼働中のNodeサーバーは不要ですが、初回を含めe2d3のビルド時にはインターネット接続が必要です。各テンプレートのJavaScriptはiframe内で実行されますが、サイトと同じオリジンの権限を持ちます。信頼済みの公式テンプレートのみ使用し、Issueコメントではe2d3フェンスを実行しません。テンプレート固有の外部ライブラリを利用する場合、閲覧者側でもネットワーク接続が必要なものがあります。生成物には公式コードとその依存ライブラリのライセンスを含めます。
 
 ### Mermaid・STL・SVGのプレビュー
 
@@ -91,12 +116,13 @@ Issueイベントの処理がブランチの同時更新や一時的な通信障
 
 ## ローカルプレビュー
 
-Docker はローカルプレビューに不要です。Python 3.12 と pip、およびインストール時のネットワーク接続が必要です。`scripts/requirements.txt` の `cmarkgfm`・`github-slugger`・`nh3`・`garmin-fit-sdk` をインストールしてください。種別間リンクや索引の生成にも FIT の日時が必要です。
+Docker はローカルプレビューに不要です。Python 3.12 と pip、Node.js 22 と npm、Git、curl、tar、および依存関係のインストールとe2d3のビルド時のネットワーク接続が必要です。`scripts/requirements.txt` の `cmarkgfm`・`github-slugger`・`nh3`・`garmin-fit-sdk` をインストールしてください。種別間リンクや索引の生成にも FIT の日時が必要です。
 
 ```sh
 # リポジトリのルートで実行
 python3 -m venv /tmp/greenlog-venv
 /tmp/greenlog-venv/bin/pip install -r scripts/requirements.txt
+npm ci
 /tmp/greenlog-venv/bin/python scripts/build_site.py --site-dir /tmp/greenlog-site
 python3 -m http.server --directory /tmp/greenlog-site 8000
 ```
@@ -113,13 +139,16 @@ python3 -m http.server --directory /tmp/greenlog-site 8000
 /tmp/greenlog-venv/bin/python scripts/test_build.py -v
 /tmp/greenlog-venv/bin/python scripts/test_custom_embeds.py -v
 /tmp/greenlog-venv/bin/python scripts/test_comments.py -v
+npm run test:e2d3
 ```
+
+Nodeのテストは、公式ソースの場所を環境変数 `E2D3_CONTRIB_DIR` と `E2D3_RUNTIME_DIR` に設定した場合に統合テストも実行します。未設定ではその部分をスキップします。GitHub Actionsでは公式ソースを取得したうえで実行します。
 
 ## GitHub Pages の設定とデプロイ
 
 1. リポジトリの **Settings → Pages → Build and deployment → Source** で **GitHub Actions** を選択します。Pages の利用条件・権限が満たされていることを確認してください。
 2. リポジトリの `master` または `main` へ `data/sources/**`、画面や変換処理の変更を含むコミットを push するか、**Actions → Build and deploy GitHub Pages → Run workflow** を実行します。必要に応じて `github-pages` environment の保護ルールや承認を設定します。
-3. ワークフローは checkout 後、Python 依存をインストールして `.site` をクリーン作成し、`./.github/actions/blog`、`./.github/actions/training`、`./.github/actions/sample` の Docker Action で全記事と `index.json` を生成します。GitHubのIssueとコメントを取得して記事HTMLに反映し、生成結果の `data/contents/`、ルート `index.json`、必要なコメントアーカイブを対象ブランチに保存してから、`upload-pages-artifact` と `deploy-pages` で公開します。記事や媒体を削除した場合は次の公開結果にも反映します。差分がなければコミットや push はしません。
+3. ワークフローは checkout 後、Python・Nodeの依存をインストールして `.site` をクリーン作成し、`./.github/actions/blog`、`./.github/actions/training`、`./.github/actions/sample` の Docker Action で記事を生成します。続いてe2d3用の静的ファイルと `index.json` を生成し、GitHubのIssueとコメントを記事HTMLに反映します。生成結果の `data/contents/`、ルート `index.json`、必要なコメントアーカイブを対象ブランチに保存してから、`upload-pages-artifact` と `deploy-pages` で公開します。記事や媒体を削除した場合は次の公開結果にも反映します。差分がなければコミットや push はしません。
 4. 初回公開後、Actions の実行結果と Settings → Pages に表示される URL で確認します。独自ドメインを使う場合は、リポジトリのルートに置いた `CNAME` が公開ディレクトリにコピーされます。
 
 保存には Actions の `GITHUB_TOKEN` に対する `contents: write` 権限、コメントラベルの作成には `issues: write` 権限、失敗したIssue同期の自動再試行には `actions: write` 権限、および対象ブランチへ通常の push ができる許可が必要です。既存のブランチ保護や pre-push フックは迂回しません。権限・保護ルールによる拒否、またはビルド中のブランチ変更があった場合は失敗し、公開しません。設定の変更や保護の解除は自動では行いません。公開直前のブランチ確認後にも別の push が発生し得るため、この確認と Pages デプロイは原子的ではありません。

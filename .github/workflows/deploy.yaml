@@ -11,6 +11,8 @@ on:
       - 'js/**'
       - 'assets/**'
       - 'scripts/**'
+      - 'package.json'
+      - 'package-lock.json'
       - 'data/comments/archive/**'
       - '.github/**'
   workflow_dispatch:
@@ -55,6 +57,34 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.4'
+          cache: npm
+      - name: Install fixed Node dependencies
+        run: |
+          set -euo pipefail
+          npm install --global npm@10.9.9
+          test "$(npm --version)" = 10.9.9
+          npm ci --no-audit --no-fund
+      - name: Fetch pinned official E2D3 runtime and templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/e2d3-runtime" "$RUNNER_TEMP/e2d3-contrib"
+          curl --fail --silent --show-error --location --retry 3 --connect-timeout 20 --max-time 120 \
+            --output "$RUNNER_TEMP/e2d3-0.6.4.tgz" https://registry.npmjs.org/e2d3/-/e2d3-0.6.4.tgz
+          echo '5282001264034b36955dcc8ff5811ea0e3b870608d965f462303c8158bcb375c  '"$RUNNER_TEMP/e2d3-0.6.4.tgz" | sha256sum --check --status
+          tar -xzf "$RUNNER_TEMP/e2d3-0.6.4.tgz" -C "$RUNNER_TEMP/e2d3-runtime" package/dist/lib/e2d3.js package/LICENSE
+          git init -q "$RUNNER_TEMP/e2d3-contrib"
+          git -C "$RUNNER_TEMP/e2d3-contrib" fetch --depth=1 https://github.com/e2d3/e2d3-contrib.git d48bd8256e95cfcc393d37e3e7769000dd738fc9
+          git -C "$RUNNER_TEMP/e2d3-contrib" checkout -q --detach FETCH_HEAD
+      - name: Test E2D3 static builder
+        env:
+          E2D3_CONTRIB_DIR: ${{ runner.temp }}/e2d3-contrib
+          E2D3_RUNTIME_DIR: ${{ runner.temp }}/e2d3-runtime/package
+        run: npm run test:e2d3
       - name: Install index generator dependencies
         run: python -m pip install -r scripts/requirements.txt
       - name: Ensure comment label exists
@@ -110,6 +140,13 @@ jobs:
             fi
           done
           sudo chown -R --no-dereference "$(id -u):$(id -g)" -- .site/data/contents
+      - name: Generate static E2D3 graphs
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/e2d3_build.mjs --site-dir .site \
+            --contrib-dir "$RUNNER_TEMP/e2d3-contrib" \
+            --runtime-dir "$RUNNER_TEMP/e2d3-runtime/package"
       - name: Generate index.json
         shell: bash
         run: |
@@ -337,4 +374,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-

@@ -42,3 +42,10 @@
   .main-article-body .main-code-preview-display canvas { height: 240px; }
   .main-article-body .main-code-preview-help { font-size: 11px; }
 }
+
+/* e2d3 の各グラフはページから独立させ、記事幅より外に出さない。 */
+.main-article-body .main-e2d3 { margin: 1.8em 0; min-width: 0; max-width: 100%; border: 1px solid #cbded0; border-radius: 4px; background: #fff; overflow: hidden; }
+.main-article-body .main-e2d3-frame { display: block; box-sizing: border-box; width: 100%; max-width: 100%; height: clamp(320px, 65vw, 640px); border: 0; background: #fff; }
+.main-article-body .main-e2d3 details { border-top: 1px solid #cbded0; }
+.main-article-body .main-e2d3 summary { padding: 9px 14px; color: #315f4d; font-weight: 600; cursor: pointer; }
+.main-article-body .main-e2d3 pre { margin: 0; max-width: 100%; }

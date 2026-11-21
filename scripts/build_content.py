@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import html
 import json
+import os
 import re
 import shutil
 from pathlib import Path
 from urllib.parse import quote
 
 from content import KINDS, article_data, article_paths, fix_content_urls, fix_template
-from custom_embeds import extract_custom_fences, insert_custom_fences, mark_custom_fences, remove_fence_marks
+from custom_embeds import encode_e2d3, extract_custom_fences, insert_custom_fences, mark_custom_fences, remove_fence_marks
 from prepare_site import MARKER
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -85,6 +87,17 @@ def build(root: Path, site: Path, kind: str):
     # Build mappings for all kinds to support links between Markdown/CSV/FIT sources.
     mappings = {src.resolve(): output for k in KINDS for src, output, _ in article_paths(root, k)}
     target_root = site / "data" / "contents" / kind
+    e2d3_input = site / ".greenlog-e2d3-input.json"
+    if kind == "blog" and (e2d3_input.exists() or e2d3_input.is_symlink()):
+        try:
+            if e2d3_input.is_symlink() or not e2d3_input.is_file():
+                raise ValueError("not a regular file")
+            previous = json.loads(e2d3_input.read_text(encoding="utf-8"))
+            if previous.get("format") != "greenlog-e2d3-input-v1" or not isinstance(previous.get("specs"), list):
+                raise ValueError("not a generated e2d3 input")
+        except (OSError, ValueError, AttributeError) as error:
+            raise ValueError(f"Reserved e2d3 build input is invalid: {e2d3_input}") from error
+    e2d3_specs = set()
     if target_root.exists():
         shutil.rmtree(target_root)
     target_root.mkdir(parents=True)
@@ -129,6 +142,11 @@ def build(root: Path, site: Path, kind: str):
             marked_source, mark = mark_custom_fences(source)
             title, _, body = article_data(marked_source, kind, iso_date, root)
             body, embeds = extract_custom_fences(body, mark, syntax_key)
+            for embed in embeds:
+                if embed.kind == "e2d3":
+                    spec = encode_e2d3(embed.content)
+                    if spec is not None:
+                        e2d3_specs.add(base64.b64encode(spec).decode("ascii"))
             # The marker is part of generated content, not an article template.
             # It precedes even trusted rawhtml inserted in the final step.
             body = f'<span hidden data-greenlog-syntax-key="{syntax_key}"></span>' + body
@@ -141,9 +159,14 @@ def build(root: Path, site: Path, kind: str):
         page = page.replace("__ARTICLE_DATE__", html.escape(iso_date, quote=True))
         page = page.replace("<!-- ARTICLE_CONTENT -->", body)
         page = page.replace("__COMMENT_POST_PATH__", html.escape(quote(relative.as_posix(), safe="/"), quote=True))
-        page = insert_custom_fences(page, embeds)
+        e2d3_dir = site / "data" / "contents" / "blog" / "_e2d3"
+        e2d3_prefix = Path(os.path.relpath(e2d3_dir, dest.parent)).as_posix() + "/"
+        page = insert_custom_fences(page, embeds, e2d3_prefix=e2d3_prefix)
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(page, encoding="utf-8")
+    if kind == "blog":
+        e2d3_input.write_text(json.dumps({"format": "greenlog-e2d3-input-v1", "specs": sorted(e2d3_specs)},
+                                          separators=(",", ":")) + "\n", encoding="utf-8")
     print(f"Built {len(articles)} {kind} articles in {target_root}")
 
 

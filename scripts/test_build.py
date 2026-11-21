@@ -162,7 +162,12 @@ class BuildTests(unittest.TestCase):
             self.assertNotIn('<footer class="main-footer">old</footer>', rendered)
 
     def test_full_build_paths_contents_and_clean_rebuild(self):
+        self.write("package.json", "{}")
+        self.write("package-lock.json", "{}")
+        self.write(".gitignore", "node_modules/\n")
         self.run_build()
+        for name in ("package.json", "package-lock.json", ".gitignore"):
+            self.assertFalse((self.site / name).exists())
         index = json.loads((self.site / "index.json").read_text(encoding="utf-8"))
         self.assertEqual([p["date"] for p in index["posts"]], ["2025-03-12", "2025-01-24", "2025-01-05", "2025-01-01"])
         self.assertEqual(index["posts"][1]["title"], "物語 <春> & 海")

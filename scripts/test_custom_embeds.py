@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import html
 import importlib.util
 import json
@@ -38,6 +39,18 @@ PREVIEW_BLOCK = re.compile(
 def previews(page):
     return [(match.group(1), match.group(2), html.unescape(match.group(3)))
             for match in PREVIEW_BLOCK.finditer(page)]
+
+
+E2D3_BLOCK = re.compile(
+    r'<section class="main-e2d3" data-e2d3-spec="([A-Za-z0-9+/]*={0,2})">'
+    r'<iframe class="main-e2d3-frame" src="([^"]*)" title="([^"]*)" loading="lazy"></iframe>'
+    r'<details class="main-e2d3-source"><summary>データを表示</summary>'
+    r'<pre><code>(.*?)</code></pre></details></section>', re.S,
+)
+
+
+def e2d3_blocks(page):
+    return list(E2D3_BLOCK.finditer(page))
 
 
 def syntax_key(page):
@@ -157,6 +170,156 @@ class CustomEmbedTests(unittest.TestCase):
         _, _, rendered = render_blog(marked, '2025-01-02')
         _, embeds = extract_custom_fences(rendered, mark)
         self.assertEqual(embeds[-1].content, '<p>no final newline</p>')
+
+    def test_e2d3_sample_multiple_duplicate_and_nested_paths(self):
+        one = '# template\nBar Chart\n\n# data\n年,値\n2025,42\n'
+        two = '# template\n折れ線図\n# data\n月,値\n1,2\n'
+        empty = '# template\nEmpty Data\n# data\n'
+        fences = ''.join('```e2d3\n' + content + '```\n\n'
+                         for content in (one, two, one, empty))
+        self.write('data/sources/blog/20250101.md', '# Root\n\n' + fences)
+        self.write('data/sources/blog/level/deep/20250102.md', '# Nested\n\n' + fences)
+        build(self.root, self.site, 'blog')
+        root_path = self.site / 'data/contents/blog/2025-01-01.html'
+        nested_path = self.site / 'data/contents/blog/level/deep/2025-01-02.html'
+        for path, prefix in ((root_path, '_e2d3/'), (nested_path, '../../_e2d3/')):
+            page = path.read_text(encoding='utf-8')
+            blocks = e2d3_blocks(page)
+            self.assertEqual(len(blocks), 4)
+            for match, template, data, source in zip(blocks,
+                    ('Bar Chart', '折れ線図', 'Bar Chart', 'Empty Data'),
+                    ('年,値\n2025,42\n', '月,値\n1,2\n', '年,値\n2025,42\n', ''),
+                    (one, two, one, empty)):
+                expected = json.dumps({'template': template, 'data': data}, ensure_ascii=False,
+                                      sort_keys=True, separators=(',', ':')).encode('utf-8')
+                self.assertEqual(base64.b64decode(match.group(1), validate=True), expected)
+                digest = hashlib.sha256(expected).hexdigest()
+                self.assertEqual(match.group(2), prefix + digest + '.html')
+                self.assertEqual((path.parent / match.group(2)).resolve(),
+                                 self.site / 'data/contents/blog/_e2d3' / (digest + '.html'))
+                self.assertEqual(html.unescape(match.group(3)), 'E2D3: ' + template)
+                self.assertEqual(html.unescape(match.group(4)), source)
+            self.assertEqual(blocks[0].group(1), blocks[2].group(1))
+            self.assertEqual(blocks[0].group(2), blocks[2].group(2))
+            self.assertNotIn(' sandbox=', page)
+        first = (root_path.read_bytes(), nested_path.read_bytes())
+        build(self.root, self.site, 'blog')
+        self.assertEqual(first, (root_path.read_bytes(), nested_path.read_bytes()))
+
+    def test_e2d3_preserves_exact_utf8_line_endings_data_and_empty_data(self):
+        source = self.write('data/sources/blog/nest/20250102.md', '')
+        raw = (b'# T\r\n\r\n> - ```e2d3\r\n>   # template\r\n'
+               b'>   \xe5\x9b\xb3 Chart\n>   \r\n>   # data\r\n'
+               b'>   text,value\r\n>   \xe6\xbc\xa2\xe5\xad\x97,\x00\xef\xbf\xbd\n'
+               b'>   \tquote,"\xc3\xa9"\r\n>   ```\r\n\r\n'
+               b'```e2d3\n# template\nEmpty\n# data')
+        source.write_bytes(raw)
+        build(self.root, self.site, 'blog')
+        page = (self.site / 'data/contents/blog/nest/2025-01-02.html').read_bytes().decode('utf-8')
+        blocks = e2d3_blocks(page)
+        self.assertEqual(len(blocks), 2)
+        spec = json.loads(base64.b64decode(blocks[0].group(1)).decode('utf-8'))
+        self.assertEqual(spec, {'template': '図 Chart',
+                                'data': 'text,value\r\n漢字,\x00\ufffd\n\tquote,"é"\r\n'})
+        spec = json.loads(base64.b64decode(blocks[1].group(1)).decode('utf-8'))
+        self.assertEqual(spec, {'template': 'Empty', 'data': ''})
+        self.assertEqual(html.unescape(blocks[1].group(4)), '# template\nEmpty\n# data')
+
+    def test_e2d3_escapes_title_and_full_source_without_injection(self):
+        template = 'Chart " onload="evil & <img>'
+        data = ('name,value\n</code></pre></details><script>alert(1)</script>,&amp;\n'
+                '<img src=x onerror=alert(2)>,"quoted"\n')
+        content = '# template\n' + template + '\n# data\n' + data
+        _, page = self.page('```e2d3\n' + content + '```\n')
+        blocks = e2d3_blocks(page)
+        self.assertEqual(len(blocks), 1)
+        self.assertEqual(json.loads(base64.b64decode(blocks[0].group(1))),
+                         {'template': template, 'data': data})
+        self.assertEqual(html.unescape(blocks[0].group(4)), content)
+        self.assertEqual(html.unescape(blocks[0].group(3)), 'E2D3: ' + template)
+        parser = TagCollector()
+        parser.feed(page)
+        self.assertNotIn('script', [tag for tag, _ in parser.tags])
+        self.assertNotIn('img', [tag for tag, _ in parser.tags])
+        frames = [attrs for tag, attrs in parser.tags if tag == 'iframe']
+        self.assertEqual(len(frames), 1)
+        self.assertEqual(set(frames[0]), {'class', 'src', 'title', 'loading'})
+        self.assertEqual(frames[0]['title'], 'E2D3: ' + template)
+
+    def test_e2d3_csv_does_not_reinterpret_section_lines_or_fences(self):
+        data = ('# template\nnot another section\n# data\n'
+                '```e2d3\n# template\nInner\n# data\nx,y\n```\n'
+                '```youtube\nhttps://youtu.be/B74K2b7IZDw\n```\n')
+        content = '# template\n  Chart With Spaces  \n# data\n' + data
+        _, page = self.page('````e2d3\n' + content + '````\n')
+        blocks = e2d3_blocks(page)
+        self.assertEqual(len(blocks), 1)
+        self.assertEqual(json.loads(base64.b64decode(blocks[0].group(1))),
+                         {'template': '  Chart With Spaces  ', 'data': data})
+        self.assertEqual(html.unescape(blocks[0].group(4)), content)
+        self.assertNotIn('youtube.com/embed', page)
+        self.assertNotIn('glcustom', page)
+
+    def test_e2d3_rejects_malformed_sections_and_unsafe_template_paths(self):
+        invalid = [
+            '', '# template\n\n# data\na,b\n', '# template\n   \n# data\n',
+            '# template \nchart\n# data\na,b\n', '# Template\nchart\n# data\na,b\n',
+            '# template\nchart\n# data \na,b\n', '# template\nchart\n# datax\na,b\n',
+            '# data\na,b\n# template\nchart\n', '# template\nchart\nextra\n# data\n',
+            '# template\nchart\n', '# template\n.\n# data\n',
+            '# template\n..\n# data\n', '# template\n../chart\n# data\n',
+            '# template\nchart/other\n# data\n', '# template\nchart\\other\n# data\n',
+            '# template\nC:chart\n# data\n', '# template\nz:\n# data\n',
+            '# template\nchart..other\n# data\n', '# template\nchart\tname\n# data\n',
+            '# template\nchart\x7fname\n# data\n', '# template\nchart\x85name\n# data\n',
+            '# template\nchart\x00name\n# data\n',
+        ]
+        for content in invalid:
+            with self.subTest(content=repr(content)):
+                self.assertIsNone(custom_embeds.parse_e2d3(content))
+        markdown = '\n'.join('```e2d3\n' + content + ('\n' if content and not content.endswith('\n') else '')
+                             + '```\n' for content in invalid)
+        source, page = self.page(markdown)
+        self.assertIn(render_blog(source, '2025-01-02')[2], page)
+        self.assertEqual(page.count('<pre lang="e2d3">'), len(invalid))
+        self.assertNotIn('class="main-e2d3"', page)
+        self.assertNotIn('<iframe', page)
+        self.assertIsNone(custom_embeds.render_e2d3('# template\n\ud800\n# data\n'))
+
+    def test_e2d3_only_real_trusted_fences_and_not_issue_comments(self):
+        content = '# template\nChart\n# data\na,b\n1,2\n'
+        raw = ('<pre lang="e2d3"><code>not an embed</code></pre>\n'
+               '<section class="main-e2d3" data-e2d3-spec="not!base64">'
+               '<p>author HTML</p></section>\n'
+               '```e2d3\n' + content + '```\n')
+        markdown = ('<pre lang="e2d3"><code>handwritten</code></pre>\n\n'
+                    '````python\n```e2d3\n' + content + '```\n````\n\n'
+                    '<div>\n```e2d3\n' + content + '```\n</div>\n\n'
+                    '~~~~rawhtml\n' + raw + '~~~~\n\n'
+                    '> - ~~~e&#50;d3 extra\n>   # template\n>   Chart\n'
+                    '>   # data\n>   a,b\n>   1,2\n>   ~~~\n')
+        source, page = self.page(markdown)
+        blocks = e2d3_blocks(page)
+        self.assertEqual(len(blocks), 1)
+        self.assertEqual(json.loads(base64.b64decode(blocks[0].group(1))),
+                         {'template': 'Chart', 'data': 'a,b\n1,2\n'})
+        self.assertIn(raw, page)
+        manifest = json.loads((self.site / '.greenlog-e2d3-input.json').read_text(encoding='utf-8'))
+        self.assertEqual(manifest['format'], 'greenlog-e2d3-input-v1')
+        self.assertEqual(manifest['specs'], [blocks[0].group(1)])
+        self.assertIn('<pre lang="e2d3"><code>handwritten</code></pre>', page)
+        baseline = render_blog(source, '2025-01-02')[2]
+        start = baseline.index('<pre lang="python">')
+        outer = baseline[start:baseline.index('</code></pre>', start) + len('</code></pre>')]
+        self.assertIn(outer, page)
+        self.assertNotIn('glcustom', page)
+        with patch('custom_embeds.render_e2d3') as renderer:
+            comment = render_markdown('```e2d3\n' + content + '<script>evil</script>\n```', 'comment-1-')
+        renderer.assert_not_called()
+        self.assertIn('<pre lang="e2d3">', comment)
+        self.assertIn('&lt;script&gt;evil&lt;/script&gt;', comment)
+        self.assertNotIn('<iframe', comment)
+        self.assertNotIn('class="main-e2d3"', comment)
 
     def test_invalid_services_preserve_exact_rendered_blocks(self):
         parts = []
