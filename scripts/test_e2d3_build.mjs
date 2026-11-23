@@ -4,10 +4,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
-import { spawnSync, execFile } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
 import { parse } from 'csv-parse/sync';
 
 const repo = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -141,8 +140,66 @@ test('rejects traversal, unknown templates/dependencies, malformed base64 and sy
   }
 });
 
-const chromium = process.env.CHROMIUM || ['/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome'].find(p => fs.existsSync(p));
-test('browser draws the first 2/1 sample row and confines the SVG width', { skip: !ready || !chromium, timeout: 30000 }, async () => {
+const chromium = process.env.CHROMIUM || ['/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser'].find(p => fs.existsSync(p));
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// Use the Chrome DevTools protocol instead of --dump-dom with virtual time.
+// A fresh profile prevents the command from handing the page to an unrelated
+// running browser, which can return successfully without producing a DOM.
+async function openBrowser() {
+  const profile = fs.mkdtempSync(path.join(root, 'chrome-profile-'));
+  const child = spawn(chromium, ['--headless', '--no-sandbox', '--disable-gpu',
+    '--disable-dev-shm-usage', '--disable-background-networking', '--no-first-run',
+    '--no-default-browser-check', '--no-proxy-server', '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1',
+    '--remote-debugging-port=0', '--remote-allow-origins=*', `--user-data-dir=${profile}`,
+    '--window-size=400,600', 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
+  let stderr = '', exit;
+  child.stderr.on('data', chunk => { stderr = (stderr + chunk.toString()).slice(-8000); });
+  child.on('error', error => { exit = error.message; });
+  child.on('exit', (code, signal) => { exit = `code=${code}, signal=${signal}`; });
+  const stop = async () => {
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGTERM');
+      for (let i = 0; i < 50 && child.exitCode === null && child.signalCode === null; i++) await sleep(100);
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    }
+  };
+  try {
+    const portFile = path.join(profile, 'DevToolsActivePort');
+    const deadline = Date.now() + 30000;
+    while (!fs.existsSync(portFile) && !exit && Date.now() < deadline) await sleep(100);
+    if (!fs.existsSync(portFile)) throw new Error(`Chromium did not start (${exit || 'timeout'}).\n${stderr}`);
+    const port = Number(fs.readFileSync(portFile, 'utf8').split('\n')[0]);
+    const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
+    const target = targets.find(item => item.type === 'page');
+    if (!target?.webSocketDebuggerUrl) throw new Error('Chromium did not provide a page target');
+    const socket = new WebSocket(target.webSocketDebuggerUrl);
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('Chromium DevTools connection timed out')), 10000);
+      socket.addEventListener('open', () => { clearTimeout(timer); resolve(); }, { once: true });
+      socket.addEventListener('error', () => { clearTimeout(timer); reject(new Error('Chromium DevTools connection failed')); }, { once: true });
+    });
+    let seq = 0;
+    const pending = new Map();
+    socket.addEventListener('message', event => {
+      const message = JSON.parse(event.data), item = pending.get(message.id);
+      if (!item) return;
+      pending.delete(message.id); clearTimeout(item.timer);
+      if (message.error) item.reject(new Error(message.error.message)); else item.resolve(message.result);
+    });
+    function command(method, params = {}) {
+      return new Promise((resolve, reject) => {
+        const id = ++seq;
+        const timer = setTimeout(() => { pending.delete(id); reject(new Error(`Chromium ${method} timed out`)); }, 10000);
+        pending.set(id, { resolve, reject, timer });
+        socket.send(JSON.stringify({ id, method, params }));
+      });
+    }
+    return { command, close: async () => { socket.close(); await stop(); }, diagnostics: () => stderr };
+  } catch (error) { await stop(); throw error; }
+}
+
+test('browser draws the first 2/1 sample row and confines the SVG width', { skip: !ready || !chromium, timeout: 150000 }, async () => {
   const site = createSite(), g = graph('bipartite-graph-original', sample);
   const bar = graph('barchart-javascript', 'name,age\nA,10\nB,20\n');
   const parallel = graph('parallel-coordinates', 'wrong,shape\na,b\n');
@@ -152,32 +209,61 @@ test('browser draws the first 2/1 sample row and confines the SVG width', { skip
   const data = parse(sample, { bom: true, record_delimiter: ['\r\n', '\n', '\r'] });
   const male = data.slice(2).filter(r => r[0] === '02_高校生').reduce((sum,r) => sum + Number(r[2]), 0);
   const female = data.slice(2).filter(r => r[0] === '02_高校生').reduce((sum,r) => sum + Number(r[3]), 0);
-  const script = `<script>setTimeout(function(){var v={};['SalesAttempts','Sales'].forEach(function(id){var xs=[].slice.call(document.querySelectorAll('#'+id+' .part0 .mainbar'));var row=xs.find(function(x){return x.querySelector('.barlabel').textContent==='02_高校生'});v[id]=row&&row.querySelector('.barvalue').textContent});var s=document.querySelector('#e2d3-chart-area svg');v.svg=!!s;v.viewBox=s&&s.getAttribute('viewBox');v.width=s&&s.getBoundingClientRect().width;v.viewport=document.documentElement.clientWidth;var bars=[].slice.call(document.querySelectorAll('rect.bar'));v.bars=bars.length;v.barRight=bars.map(function(x){return x.getBoundingClientRect().right});v.paths=document.querySelectorAll('#e2d3-chart-area path').length;v.error=!document.getElementById('e2d3-error').hidden;document.body.setAttribute('data-test',JSON.stringify(v))},3000);</script>`;
+  const snapshot = `(() => { var area=document.getElementById('e2d3-chart-area');
+    var error=document.getElementById('e2d3-error'); if(!area || !error) return null;
+    var v={url:location.href}; ['SalesAttempts','Sales'].forEach(function(id){
+      var xs=[].slice.call(document.querySelectorAll('#'+id+' .part0 .mainbar'));
+      var row=xs.find(function(x){return x.querySelector('.barlabel')?.textContent==='02_高校生'});
+      v[id]=row?.querySelector('.barvalue')?.textContent;
+    });
+    var s=area.querySelector('svg'); v.svg=!!s; v.viewBox=s?.getAttribute('viewBox');
+    v.width=s?.getBoundingClientRect().width; v.viewport=document.documentElement.clientWidth;
+    var bars=[].slice.call(document.querySelectorAll('rect.bar'));
+    v.bars=bars.length; v.barRight=bars.map(x=>x.getBoundingClientRect().right);
+    v.paths=area.querySelectorAll('path').length; v.error=!error.hidden; return v; })()`;
   const server = http.createServer((req, res) => {
     let filename;
     try { filename = path.join(site, decodeURIComponent(new URL(req.url, 'http://localhost').pathname).replace(/^\/project-name\//, '/')); } catch { res.writeHead(400).end(); return; }
     if (!filename.startsWith(site + path.sep) || !fs.existsSync(filename) || !fs.statSync(filename).isFile()) { res.writeHead(404).end(); return; }
-    if (filename.endsWith('.html')) { res.setHeader('Content-Type', 'text/html; charset=utf-8'); res.end(fs.readFileSync(filename, 'utf8').replace('</body>', script + '</body>')); }
+    if (filename.endsWith('.html')) { res.setHeader('Content-Type', 'text/html; charset=utf-8'); res.end(fs.readFileSync(filename)); }
     else { res.setHeader('Content-Type', filename.endsWith('.js') ? 'application/javascript' : filename.endsWith('.css') ? 'text/css' : 'text/plain'); res.end(fs.readFileSync(filename)); }
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  let browser;
   try {
-    async function render(id) {
+    browser = await openBrowser();
+    async function render(id, isReady) {
       const url = `http://127.0.0.1:${server.address().port}/project-name/data/contents/blog/_e2d3/${id}.html`;
-      const { stdout } = await promisify(execFile)(chromium, ['--headless', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1', '--window-size=400,600', '--virtual-time-budget=8000', '--dump-dom', url], { maxBuffer: 20 * 1024 * 1024, timeout: 25000 });
-      const m = /data-test="([^"]+)"/.exec(stdout); assert.ok(m, stdout.slice(0, 2000));
-      return JSON.parse(m[1].replaceAll('&quot;', '"').replaceAll('&amp;', '&'));
+      await browser.command('Page.navigate', { url });
+      const deadline = Date.now() + 20000;
+      let value = null, lastError = '';
+      while (Date.now() < deadline) {
+        try {
+          const result = await browser.command('Runtime.evaluate', { expression: snapshot, returnByValue: true });
+          value = result.result?.value;
+        } catch (error) { lastError = error.message; } // Navigation can temporarily replace the JS context.
+        if (value?.url === url && value.error)
+          throw new Error(`Chromium reported a chart error for ${id}: ${JSON.stringify(value)}\n${browser.diagnostics()}`);
+        if (value?.url === url && isReady(value)) {
+          // Let the templates' transitions finish before checking SVG bounds.
+          await sleep(1000);
+          const result = await browser.command('Runtime.evaluate', { expression: snapshot, returnByValue: true });
+          return result.result?.value;
+        }
+        await sleep(100);
+      }
+      throw new Error(`Chromium did not finish drawing ${id}: ${JSON.stringify(value)} ${lastError}\n${browser.diagnostics()}`);
     }
-    const value = await render(g.id);
+    const value = await render(g.id, v => v.svg && v.viewBox && v.SalesAttempts && v.Sales);
     assert.equal(Number(value.SalesAttempts), male); assert.equal(Number(value.Sales), female);
     const [x, y, w, h] = value.viewBox.split(' ').map(Number);
     assert.ok(value.svg && x <= 0 && y <= 0 && x+w >= 1200 && y+h >= 571);
     assert.ok(value.width <= value.viewport, JSON.stringify(value)); assert.equal(value.error, false);
-    const barValue = await render(bar.id); assert.equal(barValue.bars, 2); assert.ok(barValue.width <= barValue.viewport); assert.equal(barValue.error, false);
-    const parallelValue = await render(parallel.id); assert.ok(parallelValue.svg && parallelValue.paths > 0); assert.ok(parallelValue.width <= parallelValue.viewport); assert.equal(parallelValue.error, false);
-    const fixedValue = await render(fixed.id); assert.equal(fixedValue.bars, 3);
+    const barValue = await render(bar.id, v => v.svg && v.viewBox && v.bars === 2); assert.equal(barValue.bars, 2); assert.ok(barValue.width <= barValue.viewport); assert.equal(barValue.error, false);
+    const parallelValue = await render(parallel.id, v => v.svg && v.viewBox && v.paths > 0); assert.ok(parallelValue.svg && parallelValue.paths > 0); assert.ok(parallelValue.width <= parallelValue.viewport); assert.equal(parallelValue.error, false);
+    const fixedValue = await render(fixed.id, v => v.svg && v.viewBox && v.bars === 3); assert.equal(fixedValue.bars, 3);
     assert.ok(fixedValue.barRight.every(right => right <= fixedValue.viewport + 1), JSON.stringify(fixedValue));
-    const c3Value = await render(c3.id);
+    const c3Value = await render(c3.id, v => v.svg && v.paths > 0);
     assert.ok(c3Value.svg && c3Value.paths > 0 && !c3Value.error, JSON.stringify(c3Value));
-  } finally { await new Promise(resolve => server.close(resolve)); }
+  } finally { if (browser) await browser.close(); await new Promise(resolve => server.close(resolve)); }
 });
