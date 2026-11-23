@@ -29,6 +29,26 @@
               "label": "11月",
               "children": [
                 {
+                  "label": "Jog 2026-11-23 09:37:25 JST",
+                  "href": "data/contents/training/2026-11-23_09-37-25.html"
+                },
+                {
+                  "label": "Swim 2026-11-22 18:45:22 JST",
+                  "href": "data/contents/training/2026-11-22_18-45-22.html"
+                },
+                {
+                  "label": "Swim 2026-11-21 19:04:58 JST",
+                  "href": "data/contents/training/2026-11-21_19-04-58.html"
+                },
+                {
+                  "label": "Swim 2026-11-18 22:03:01 JST",
+                  "href": "data/contents/training/2026-11-18_22-03-01.html"
+                },
+                {
+                  "label": "Swim 2026-11-17 22:03:02 JST",
+                  "href": "data/contents/training/2026-11-17_22-03-02.html"
+                },
+                {
                   "label": "Jog 2026-11-16 19:53:14 JST",
                   "href": "data/contents/training/2026-11-16_19-53-14.html"
                 },
@@ -78,6 +98,46 @@
     }
   ],
   "posts": [
+    {
+      "title": "Jog 2026-11-23 09:37:25 JST",
+      "date": "2026-11-23",
+      "type": "training",
+      "path": "data/contents/training/2026-11-23_09-37-25.html",
+      "excerpt": "FITデータに記録されたセッションとラップの記録。",
+      "thumbnail": "data/sources/training/thumbnail.jpg"
+    },
+    {
+      "title": "Swim 2026-11-22 18:45:22 JST",
+      "date": "2026-11-22",
+      "type": "training",
+      "path": "data/contents/training/2026-11-22_18-45-22.html",
+      "excerpt": "FITデータに記録されたセッションとラップの記録。",
+      "thumbnail": "data/sources/training/thumbnail.jpg"
+    },
+    {
+      "title": "Swim 2026-11-21 19:04:58 JST",
+      "date": "2026-11-21",
+      "type": "training",
+      "path": "data/contents/training/2026-11-21_19-04-58.html",
+      "excerpt": "FITデータに記録されたセッションとラップの記録。",
+      "thumbnail": "data/sources/training/thumbnail.jpg"
+    },
+    {
+      "title": "Swim 2026-11-18 22:03:01 JST",
+      "date": "2026-11-18",
+      "type": "training",
+      "path": "data/contents/training/2026-11-18_22-03-01.html",
+      "excerpt": "FITデータに記録されたセッションとラップの記録。",
+      "thumbnail": "data/sources/training/thumbnail.jpg"
+    },
+    {
+      "title": "Swim 2026-11-17 22:03:02 JST",
+      "date": "2026-11-17",
+      "type": "training",
+      "path": "data/contents/training/2026-11-17_22-03-02.html",
+      "excerpt": "FITデータに記録されたセッションとラップの記録。",
+      "thumbnail": "data/sources/training/thumbnail.jpg"
+    },
     {
       "title": "Jog 2026-11-16 19:53:14 JST",
       "date": "2026-11-16",
