@@ -33,7 +33,7 @@ concurrency:
   queue: max
 
 jobs:
-  deploy:
+  build:
     if: >-
       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch' ||
@@ -42,8 +42,11 @@ jobs:
          github.event.label.name == 'comment-for-post')))
     runs-on: ubuntu-latest
     environment:
+      # Preserve the existing approval gate before generated content is pushed.
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      expected_head: ${{ steps.save_generated.outputs.expected_head }}
+      artifact_name: ${{ steps.artifact_identity.outputs.name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -357,15 +360,45 @@ jobs:
             trap - EXIT HUP INT TERM
           fi
           echo "expected_head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Set Pages artifact name
+        id: artifact_identity
+        shell: bash
+        run: echo "name=github-pages-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
+          name: ${{ steps.artifact_identity.outputs.name }}
           path: .site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout current branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
       - name: Verify branch before deploying
         env:
-          EXPECTED_HEAD: ${{ steps.save_generated.outputs.expected_head }}
+          EXPECTED_HEAD: ${{ needs.build.outputs.expected_head }}
+          ARTIFACT_NAME: ${{ needs.build.outputs.artifact_name }}
         run: |
           set -euo pipefail
+          case "$GITHUB_REF" in
+            refs/heads/main|refs/heads/master) ;;
+            *) echo "Refusing to deploy from an unsupported ref: $GITHUB_REF" >&2; exit 1 ;;
+          esac
+          if ! [[ "$EXPECTED_HEAD" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'Missing or invalid expected branch head; refusing to deploy.' >&2
+            exit 1
+          fi
+          if ! [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ ]] || ! [[ "$ARTIFACT_NAME" =~ ^github-pages-${GITHUB_RUN_ID}-[1-9][0-9]*$ ]]; then
+            echo 'Missing or invalid Pages artifact name; refusing to deploy.' >&2
+            exit 1
+          fi
           git fetch --no-tags origin "$GITHUB_REF"
           if [ "$(git rev-parse FETCH_HEAD)" != "$EXPECTED_HEAD" ]; then
             echo 'Branch changed during this run; refusing to deploy stale content.' >&2
@@ -374,3 +407,5 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: ${{ needs.build.outputs.artifact_name }}
