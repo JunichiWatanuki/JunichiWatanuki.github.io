@@ -21,6 +21,7 @@
     "js-yaml": "3.5.5",
     "requirejs": "2.2.0",
     "requirejs-domready": "2.0.1",
-    "requirejs-text": "2.0.15"
+    "requirejs-text": "2.0.15",
+    "topojson-client": "2.1.0"
   }
 }

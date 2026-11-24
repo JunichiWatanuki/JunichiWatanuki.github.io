@@ -12,6 +12,7 @@ import { TextDecoder } from 'node:util';
 import { parse as csvParse } from 'csv-parse/sync';
 import { stringify } from 'csv-stringify/sync';
 import { validateTemplate } from './e2d3_validation.mjs';
+import { patchFrostbiteMain } from './e2d3_frostbite.mjs';
 
 const CONTRIB_COMMIT = 'd48bd8256e95cfcc393d37e3e7769000dd738fc9';
 const RUNTIME_SHA256 = '6e953de0bd7613f987288690ee4c82a948a0eba4812d14f0a4edb9bb552b81c6';
@@ -189,10 +190,10 @@ function checkDependencies(main, template, files) {
   // Direct hard-coded remote loads cannot be made self-contained by copying a template directory.
   if (/\b(?:fetch|d3\.(?:json|csv|tsv|text|xml|html)|\$\.get(?:JSON|Script)?)\s*\(\s*["'](?:https?:)?\/\//i.test(source)) throw new Error(`${template}: direct external data/script dependency is unsupported`);
 }
-function parseRows(csv, delimiter = ',', minColumns = 2) {
+function parseRows(csv, delimiter = ',', minColumns = 2, minRows = 2) {
   if (Buffer.byteLength(csv, 'utf8') > LIMIT || /\0/.test(csv)) throw new Error('CSV is too large or contains NUL');
   const rows = csvParse(csv, { delimiter, bom: true, record_delimiter: ['\r\n', '\n', '\r'], skip_empty_lines: true, relax_column_count: false, max_record_size: LIMIT });
-  if (rows.length < 2 || rows.length > 10000 || rows[0].length < minColumns || rows[0].length > 256 || rows.some(r => r.every(v => !v.trim()))) throw new Error('CSV is empty or has an invalid shape');
+  if (rows.length < minRows || rows.length > 10000 || rows[0].length < minColumns || rows[0].length > 256 || rows.some(r => r.every(v => !v.trim()))) throw new Error('CSV is empty or has an invalid shape');
   return rows;
 }
 function number(s) { return s.trim() !== '' && /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(s.trim()) && Number.isFinite(Number(s)); }
@@ -216,11 +217,28 @@ function prepareData(spec, files) {
   const defaultName = files.has('data.csv') ? 'data.csv' : (files.has('data.tsv') ? 'data.tsv' : null);
   if (!defaultName) throw new Error(`${spec.template}: missing default data.csv/data.tsv`);
   let defaults;
-  try { defaults = parseRows(decode(files.get(defaultName), `${spec.template}/${defaultName}`), defaultName.endsWith('.tsv') ? '\t' : ','); if (spec.template === 'bipartite-graph-original') validateBipartite(defaults); }
+  try {
+    let bytes = files.get(defaultName);
+    // The pinned upstream file ends in an unclosed quoted field. Repair only
+    // this exact known blob, never arbitrary user input or other CSV files.
+    if (spec.template === 'InfiniteElementMethod_E2D3-LIG_03' && defaultName === 'data.csv') {
+      if (digest(bytes) !== '4823876de57adf080e7c94545beda77c57aa364f65d9c0a59c14c63bb8f9cfb7')
+        throw new Error('Unexpected official default data');
+      bytes = Buffer.concat([bytes, Buffer.from('"')]);
+    }
+    defaults = parseRows(decode(bytes, `${spec.template}/${defaultName}`), defaultName.endsWith('.tsv') ? '\t' : ',');
+    if (spec.template === 'bipartite-graph-original') validateBipartite(defaults);
+    if (['InfiniteElementMethod_E2D3-LIG_03', 'force-directed-graph', 'virtual-frostbite-halfmarathon'].includes(spec.template))
+      validateTemplate(spec.template, defaults, defaults);
+  }
   catch (e) { throw new Error(`${spec.template}: invalid default data: ${e.message}`); }
   let rows, fallback = false, why = '';
   try {
-    rows = parseRows(spec.data, ',', spec.template === 'piechart-javascript' ? 1 : 2);
+    // The force-directed template's official input is TSV. Also accept its
+    // CSV equivalent; only inspect its header, not tabs within other cells.
+    const delimiter = spec.template === 'force-directed-graph' && spec.data.split(/\r\n|\r|\n/, 1)[0].includes('\t') ? '\t' : ',';
+    rows = parseRows(spec.data, delimiter, spec.template === 'piechart-javascript' ? 1 : 2,
+      spec.template === 'InfiniteElementMethod_E2D3-LIG_03' ? 1 : 2);
     if (spec.template === 'bipartite-graph-original') validateBipartite(rows);
     else validateTemplate(spec.template, rows, defaults);
   } catch (e) { rows = defaults; fallback = true; why = e.message; }
@@ -228,7 +246,7 @@ function prepareData(spec, files) {
   return { data: Buffer.from(stringify(rows, { record_delimiter: '\n' }), 'utf8'), fallback, why };
 }
 function frame(id, template, fallback, why) {
-  const message = fallback ? `<p class="notice" role="status">入力 CSV がテンプレートに適合しないため、公式の既定データを表示しています。 (${escapeHtml(why)})</p>` : '';
+  const message = fallback ? `<p class="notice" role="status">入力データがテンプレートに適合しないため、公式の既定データを表示しています。 (${escapeHtml(why)})</p>` : '';
   return `<!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escapeHtml(template)}</title><base id="e2d3-base" href="./"><style>
@@ -244,9 +262,23 @@ body { display:flex; flex-direction:column }
   function fail() { document.getElementById('e2d3-error').hidden = false; }
   // RequireJS may try a CDN first and then successfully load a local fallback.
   // Only uncaught script errors are fatal here; the timeout covers no output.
-  window.addEventListener('error', function (event) { if (event.target === window) fail(); }, true);
+  var template = ${JSON.stringify(template)};
+  window.addEventListener('error', function (event) {
+    if (event.target === window || (template === 'virtual-frostbite-halfmarathon' &&
+        event.target.localName === 'image')) fail();
+  }, true);
   window.addEventListener('unhandledrejection', fail);
-  setTimeout(function () { if (!document.getElementById('e2d3-chart-area').children.length) fail(); }, 12000);
+  setTimeout(function () {
+    var area = document.getElementById('e2d3-chart-area');
+    var selector = {
+      'InfiniteElementMethod_E2D3-LIG_03': '#SalesAttempts .edges .edge',
+      'force-directed-graph': 'svg circle',
+      'jp013-tokyo': 'path.states',
+      'virtual-frostbite-halfmarathon': 'svg image'
+    }[template];
+    if ((selector ? !area.querySelector(selector) : !area.children.length) ||
+        (template === 'jp013-tokyo' && !area.querySelector('#attrMenu .label-selector'))) fail();
+  }, 12000);
   function fit() {
     document.querySelectorAll('#e2d3-chart-area svg').forEach(function (s) {
       var wa = s.getAttribute('width') || '', ha = s.getAttribute('height') || '';
@@ -270,8 +302,17 @@ body { display:flex; flex-direction:column }
   new MutationObserver(fit).observe(document.getElementById('e2d3-chart-area'),
     {childList:true, subtree:true, attributes:true, attributeFilter:['width','height']});
   window.addEventListener('load', fit);
+  // The upstream runtime changes <base> before a template uses baseUrl.
+  // An absolute URL prevents a relative template path being added twice.
+  var runtime = document.createElement('script');
+  runtime.src = 'runtime/e2d3.js';
+  runtime.setAttribute('data-base-url', new URL('./${id}', location.href).href);
+  runtime.setAttribute('data-data-type', 'csv');
+  runtime.setAttribute('data-data-url', 'data.csv');
+  runtime.onerror = fail;
+  document.body.appendChild(runtime);
 })();
-</script><script src="runtime/e2d3.js" data-base-url="./${id}" data-data-type="csv" data-data-url="data.csv"></script></body></html>
+</script></body></html>
 `;
 }
 const REQJS_LICENSE = "Copyright jQuery Foundation and other contributors, https://jquery.org/\n\nThis software consists of voluntary contributions made by many\nindividuals. For exact contribution history, see the revision history\navailable at https://github.com/requirejs/requirejs\n\nThe following license applies to all parts of this software except as\ndocumented below:\n\n====\n\nPermission is hereby granted, free of charge, to any person obtaining\na copy of this software and associated documentation files (the\n\"Software\"), to deal in the Software without restriction, including\nwithout limitation the rights to use, copy, modify, merge, publish,\ndistribute, sublicense, and/or sell copies of the Software, and to\npermit persons to whom the Software is furnished to do so, subject to\nthe following conditions:\n\nThe above copyright notice and this permission notice shall be\nincluded in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND,\nEXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF\nMERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND\nNONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE\nLIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION\nOF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION\nWITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n\n====\n\nCopyright and related rights for sample code are waived via CC0. Sample\ncode is defined as all source code displayed within the prose of the\ndocumentation.\n\nCC0: http://creativecommons.org/publicdomain/zero/1.0/\n\n====\n\nFiles located in the node_modules directory, and certain utilities used\nto build or test the software in the test and dist directories, are\nexternally maintained libraries used by this software which have their own\nlicenses; we recommend you read them, as their terms may differ from the\nterms above.\n";
@@ -310,12 +351,29 @@ function build({ siteDir, contribDir, runtimeDir }) {
   for (const [pkg, file] of [['d3','LICENSE'], ['jquery','LICENSE.txt'], ['requirejs-text','LICENSE'], ['js-yaml','LICENSE'], ['argparse','LICENSE'], ['esprima','LICENSE.BSD']]) {
     add(`licenses/${pkg}-LICENSE`, regular(path.join(repo, 'node_modules', pkg, file), `${pkg} license`, LIMIT));
   }
+  const usesTokyoMap = [...graphs.values()].some(spec => spec.template === 'jp013-tokyo');
+  if (usesTokyoMap) add('licenses/topojson-client-LICENSE', regular(path.join(repo, 'node_modules/topojson-client/LICENSE.md'), 'topojson client license', LIMIT));
   add('licenses/requirejs-LICENSE', REQJS_LICENSE);
   add('licenses/domReady-LICENSE', DOMREADY_LICENSE);
-  add('licenses/NOTICE.txt', `E2D3 browser bundle: e2d3 npm 0.6.4, SHA-256 ${RUNTIME_SHA256}.\nOfficial templates: e2d3/e2d3-contrib commit ${CONTRIB_COMMIT}.\nBundle includes RequireJS 2.2.0, domReady 2.0.1, text 2.0.14, D3 3.5.16, jQuery 2.2.3, js-yaml 3.5.5 and E2D3 code. Original license texts are in this directory. The text plugin license is reproduced from the compatible 2.0.15 release. Individual template files and any associated notices are preserved in their respective hash directories.\n`);
+  add('licenses/NOTICE.txt', `E2D3 browser bundle: e2d3 npm 0.6.4, SHA-256 ${RUNTIME_SHA256}.\nOfficial templates: e2d3/e2d3-contrib commit ${CONTRIB_COMMIT}.\n${usesTokyoMap ? 'Tokyo map uses topojson-client 2.1.0. ' : ''}Bundle includes RequireJS 2.2.0, domReady 2.0.1, text 2.0.14, D3 3.5.16, jQuery 2.2.3, js-yaml 3.5.5 and E2D3 code. Original license texts are in this directory. The text plugin license is reproduced from the compatible 2.0.15 release. Individual template files and any associated notices are preserved in their respective hash directories.\n`);
   const templates = new Map();
   for (const spec of [...graphs.values()].sort((a,b) => a.id.localeCompare(b.id))) {
-    if (!templates.has(spec.template)) { const files = tree(contribDir, spec.template); checkDependencies(files.get('main.js'), spec.template, files); templates.set(spec.template, files); }
+    if (!templates.has(spec.template)) {
+      const files = tree(contribDir, spec.template);
+      checkDependencies(files.get('main.js'), spec.template, files);
+      if (spec.template === 'jp013-tokyo') {
+        const source = decode(files.get('main.js'), 'jp013-tokyo/main.js');
+        const old = '//# require=d3,topojson,colorbrewer';
+        if (!source.startsWith(old + '\n') && !source.startsWith(old + '\r\n'))
+          throw new Error('Unexpected jp013-tokyo dependency declaration');
+        if (files.has('greenlog-topojson.js')) throw new Error('Conflicting local topojson dependency');
+        files.set('main.js', Buffer.from(source.replace(old, '//# require=d3,topojson:greenlog-topojson,colorbrewer')));
+        files.set('greenlog-topojson.js', regular(path.join(repo, 'node_modules/topojson-client/dist/topojson-client.min.js'), 'topojson client'));
+      }
+      if (spec.template === 'virtual-frostbite-halfmarathon')
+        files.set('main.js', patchFrostbiteMain(files.get('main.js')));
+      templates.set(spec.template, files);
+    }
     const files = templates.get(spec.template), result = prepareData(spec, files);
     for (const [rel, bytes] of [...files.entries()].sort(([a],[b]) => a.localeCompare(b))) if (rel !== 'data.csv') add(`${spec.id}/${rel}`, bytes);
     add(`${spec.id}/data.csv`, result.data);

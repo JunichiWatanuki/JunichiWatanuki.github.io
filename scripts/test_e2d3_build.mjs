@@ -8,6 +8,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'csv-parse/sync';
+import { stringify } from 'csv-stringify/sync';
 
 const repo = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const cli = path.join(repo, 'scripts/e2d3_build.mjs');
@@ -107,6 +108,7 @@ test('sample, separate and duplicate graphs, fallbacks and TSV are prepared repr
   assert.ok(fs.statSync(out(site, `${b.id}/main.js`)).size > 0);
   assert.ok(fs.statSync(out(site, 'runtime/e2d3.js')).size > 0);
   for (const pkg of ['e2d3','contrib','d3','jquery','requirejs','domReady','requirejs-text','js-yaml']) assert.ok(fs.statSync(out(site, `licenses/${pkg}-LICENSE`)).size > 0);
+  assert.ok(!fs.existsSync(out(site, 'licenses/topojson-client-LICENSE')));
   const marker = fs.readFileSync(out(site, '.greenlog-e2d3-manifest.json'), 'utf8');
   success(run(site)); assert.equal(fs.readFileSync(out(site, '.greenlog-e2d3-manifest.json'), 'utf8'), marker);
   fs.unlinkSync(path.join(site, 'data/contents/blog/level/深い/nested.html'));
@@ -181,9 +183,10 @@ async function openBrowser() {
     });
     let seq = 0;
     const pending = new Map();
+    const events = [];
     socket.addEventListener('message', event => {
       const message = JSON.parse(event.data), item = pending.get(message.id);
-      if (!item) return;
+      if (!item) { if (message.method?.startsWith('Network.')) events.push(message); return; }
       pending.delete(message.id); clearTimeout(item.timer);
       if (message.error) item.reject(new Error(message.error.message)); else item.resolve(message.result);
     });
@@ -195,7 +198,7 @@ async function openBrowser() {
         socket.send(JSON.stringify({ id, method, params }));
       });
     }
-    return { command, close: async () => { socket.close(); await stop(); }, diagnostics: () => stderr };
+    return { command, events: () => events, close: async () => { socket.close(); await stop(); }, diagnostics: () => stderr };
   } catch (error) { await stop(); throw error; }
 }
 
@@ -265,5 +268,211 @@ test('browser draws the first 2/1 sample row and confines the SVG width', { skip
     assert.ok(fixedValue.barRight.every(right => right <= fixedValue.viewport + 1), JSON.stringify(fixedValue));
     const c3Value = await render(c3.id, v => v.svg && v.paths > 0);
     assert.ok(c3Value.svg && c3Value.paths > 0 && !c3Value.error, JSON.stringify(c3Value));
+  } finally { if (browser) await browser.close(); await new Promise(resolve => server.close(resolve)); }
+});
+
+// Read the immutable official blob used by the builder, not a mutable checkout
+// file. These fixtures intentionally differ from the article and the defaults.
+function official(template, name) {
+  const result = spawnSync('git', ['-C', contrib, 'show', `d48bd8256e95cfcc393d37e3e7769000dd738fc9:${template}/${name}`], { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 });
+  success(result);
+  return result.stdout;
+}
+function csv(rows, delimiter = ',') {
+  return stringify(rows, { delimiter, record_delimiter: '\n' });
+}
+function fourTemplateFixtures() {
+  const infiniteName = 'InfiniteElementMethod_E2D3-LIG_03';
+  const raw = official(infiniteName, 'data.csv');
+  assert.ok(raw.endsWith('"1') && !raw.endsWith('"1"'), 'official malformed final quote changed');
+  assert.throws(() => parse(raw));
+  const infiniteDefaults = parse(raw + '"', { bom: true });
+  const infiniteRows = infiniteDefaults.map(row => [...row]);
+  const oldLeft = infiniteRows[0][0], oldValue = Number(infiniteRows[0][2]);
+  const infiniteMarker = 'ARTICLE_INFINITE_FIRST_MARKER';
+  for (const row of infiniteRows) if (row[0] === oldLeft) row[0] = infiniteMarker;
+  infiniteRows[0][2] = '987654';
+  const infiniteSum = infiniteRows.filter(row => row[0] === infiniteMarker).reduce((n, row) => n + Number(row[2]), 0);
+  assert.ok(infiniteSum > 987654 && Number(infiniteRows[0][2]) !== oldValue);
+  const infinite = graph(infiniteName, csv(infiniteRows));
+  const brokenInfinite = graph(infiniteName, raw); // the official unclosed quote is invalid article input
+
+  const forceName = 'force-directed-graph';
+  const forceDefaults = parse(official(forceName, 'data.tsv'), { delimiter: '\t', bom: true });
+  const forceRows = forceDefaults.map(row => [...row]);
+  const forceMarker = 'ARTICLE_FORCE_LABEL_MARKER';
+  assert.notEqual(forceRows[1][1], forceMarker);
+  forceRows[1][1] = forceMarker;
+  const forceTsv = graph(forceName, csv(forceRows, '\t'));
+  const forceCsv = graph(forceName, csv(forceRows));
+  const badForceTsvRows = forceRows.map(row => [...row]);
+  badForceTsvRows[1][3] = '9999';
+  const badForceTsv = graph(forceName, csv(badForceTsvRows, '\t'));
+  const badForceCsv = graph(forceName, 'id,label,source,target,value,color,size,width,distance\n0,broken,0,9999,1,red,1,1,1\n');
+
+  const mapName = 'jp013-tokyo';
+  const mapDefaults = parse(official(mapName, 'data.csv'), { bom: true });
+  const mapRows = mapDefaults.map(row => [...row]);
+  const mapRow = mapRows.find(row => row[0] === '千代田区');
+  assert.ok(mapRow); assert.notEqual(mapRow[1], '9137'); mapRow[1] = '9137';
+  const map = graph(mapName, csv(mapRows));
+  const badMap = graph(mapName, '市区町村,ランナー\n千代田区,invalid\n');
+
+  const frostName = 'virtual-frostbite-halfmarathon';
+  const frostRows = parse(official(frostName, 'data.csv'), { bom: true });
+  assert.equal(frostRows.length - 1, 15);
+  assert.ok(!frostRows.some(row => row[0] === 'Tajitsu'));
+  const frost = graph(frostName, csv(frostRows));
+  const badFrost = graph(frostName, 'athlete,HH,MM,SS,acolor\nArticle,0,99,00,ffffff\n');
+  return { infinite, infiniteRows, infiniteDefaults, infiniteMarker, infiniteSum, brokenInfinite,
+    forceTsv, forceCsv, forceRows, forceDefaults, forceMarker, badForceTsv, badForceCsv,
+    map, mapRows, mapDefaults, badMap, frost, frostRows, badFrost };
+}
+function assertFixtureOutput(site, fixture) {
+  const accepted = [[fixture.infinite, fixture.infiniteRows], [fixture.forceTsv, fixture.forceRows],
+    [fixture.forceCsv, fixture.forceRows], [fixture.map, fixture.mapRows], [fixture.frost, fixture.frostRows]];
+  const rejected = [[fixture.brokenInfinite, fixture.infiniteDefaults], [fixture.badForceTsv, fixture.forceDefaults],
+    [fixture.badForceCsv, fixture.forceDefaults], [fixture.badMap, fixture.mapDefaults], [fixture.badFrost, fixture.frostRows]];
+  for (const [g, rows] of accepted) {
+    assert.deepEqual(parse(fs.readFileSync(out(site, `${g.id}/data.csv`), 'utf8'), { bom: true }), rows, g.id);
+    assert.doesNotMatch(fs.readFileSync(out(site, `${g.id}.html`), 'utf8'), /公式の既定データ/, g.id);
+  }
+  for (const [g, rows] of rejected) {
+    assert.deepEqual(parse(fs.readFileSync(out(site, `${g.id}/data.csv`), 'utf8'), { bom: true }), rows, g.id);
+    assert.match(fs.readFileSync(out(site, `${g.id}.html`), 'utf8'), /公式の既定データ/, g.id);
+  }
+}
+
+test('four official-template fixtures preserve article data and report invalid-input fallback', { skip: !ready }, () => {
+  const site = createSite(), f = fourTemplateFixtures();
+  const single = graph('InfiniteElementMethod_E2D3-LIG_03', '左,右,3,1\n');
+  writeArticle(site, 'nested/article.html', [f.infinite, f.brokenInfinite, f.forceTsv, f.forceCsv,
+    f.badForceTsv, f.badForceCsv, f.map, f.badMap, f.frost, f.badFrost, single]);
+  success(run(site));
+  assertFixtureOutput(site, f);
+  assert.ok(fs.statSync(out(site, 'licenses/topojson-client-LICENSE')).size > 0);
+  assert.deepEqual(parse(fs.readFileSync(out(site, `${single.id}/data.csv`))), [['左', '右', '3', '1']]);
+  assert.doesNotMatch(fs.readFileSync(out(site, `${single.id}.html`), 'utf8'), /公式の既定データ/);
+});
+
+test('four official templates render article data and local resources with DNS blocked', { skip: !ready || !chromium, timeout: 150000 }, async () => {
+  const site = createSite(), f = fourTemplateFixtures();
+  writeArticle(site, 'nested/article.html', [f.infinite, f.forceTsv, f.forceCsv, f.map, f.frost]);
+  success(run(site));
+  const requests = [];
+  const denied = new Set();
+  const server = http.createServer((req, res) => {
+    let filename, pathname;
+    try {
+      pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
+      if (!pathname.startsWith('/project-name/')) throw new Error('outside subpath');
+      filename = path.resolve(site, '.' + pathname.slice('/project-name'.length));
+    } catch { requests.push({ path: req.url, status: 400 }); res.writeHead(400).end(); return; }
+    if (denied.has(pathname) || !filename.startsWith(site + path.sep) || !fs.existsSync(filename) || !fs.statSync(filename).isFile()) {
+      requests.push({ path: pathname, status: 404 }); res.writeHead(404).end(); return;
+    }
+    requests.push({ path: pathname, status: 200 });
+    const ext = path.extname(filename);
+    res.setHeader('Content-Type', ({ '.html': 'text/html; charset=utf-8', '.js': 'application/javascript',
+      '.css': 'text/css', '.jpg': 'image/jpeg', '.topojson': 'application/json' })[ext] || 'text/plain; charset=utf-8');
+    res.end(fs.readFileSync(filename));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  let browser;
+  try {
+    browser = await openBrowser();
+    async function render(g, expression, isReady) {
+      const url = `http://127.0.0.1:${server.address().port}/project-name/data/contents/blog/_e2d3/${g.id}.html`;
+      await browser.command('Page.navigate', { url });
+      const deadline = Date.now() + 20000;
+      let value, lastError = '';
+      while (Date.now() < deadline) {
+        try {
+          const result = await browser.command('Runtime.evaluate', { expression, returnByValue: true });
+          value = result.result?.value;
+        } catch (error) { lastError = error.message; }
+        if (value?.url === url && value.error) throw new Error(`Chart error: ${g.id} ${JSON.stringify(value)}\n${browser.diagnostics()}`);
+        if (value?.url === url && isReady(value)) return value;
+        await sleep(100);
+      }
+      throw new Error(`Chart timed out: ${g.id} ${JSON.stringify(value)} ${lastError}\n${browser.diagnostics()}`);
+    }
+    const common = `url: location.href, error: !document.getElementById('e2d3-error')?.hidden`;
+    const infinite = await render(f.infinite, `(() => { const area=document.getElementById('e2d3-chart-area'); if(!area)return null;
+      const bars=[...area.querySelectorAll('#SalesAttempts .part0 .mainbar')];
+      const marker=bars.find(x=>x.querySelector('.barlabel')?.textContent===${JSON.stringify(f.infiniteMarker)});
+      return {${common}, left:bars.length, right:area.querySelectorAll('#SalesAttempts .part1 .mainbar').length,
+        links:area.querySelectorAll('#SalesAttempts .edges .edge').length, marker:marker?.querySelector('.barlabel')?.textContent,
+        sum:marker?.__data__?.value}; })()`, v => v.left === 17 && v.right === 9 && v.links === 153 && v.marker);
+    assert.equal(infinite.marker, f.infiniteMarker);
+    assert.ok(Math.abs(infinite.sum - f.infiniteSum) < 1e-6, JSON.stringify(infinite));
+    for (const g of [f.forceTsv, f.forceCsv]) {
+      const force = await render(g, `(() => { const area=document.getElementById('e2d3-chart-area'); if(!area)return null;
+        return {${common}, circles:area.querySelectorAll('svg circle').length, lines:area.querySelectorAll('svg line').length,
+          labels:[...area.querySelectorAll('svg text')].map(x=>x.textContent)}; })()`,
+        v => v.circles === 48 && v.lines === 59 && v.labels.length === 48 && v.labels.includes(f.forceMarker));
+      assert.equal(force.labels.filter(x => x === f.forceMarker).length, 1);
+    }
+    const map = await render(f.map, `(() => { const area=document.getElementById('e2d3-chart-area'); if(!area)return null;
+      const paths=[...area.querySelectorAll('path.states')]; const places=paths.filter(x=>x.__data__?.properties?.N03_004==='千代田区');
+      return {${common}, paths:paths.length, places:places.map(x=>x.__data__.properties.data)}; })()`,
+      v => v.paths === 150 && v.places?.length === 1 && Number(v.places[0]?.['ランナー']) === 9137);
+    assert.equal(Number(map.places[0]['ランナー']), 9137);
+    const base = `/project-name/data/contents/blog/_e2d3/${f.map.id}/`;
+    for (const name of ['greenlog-topojson.js', 'jp013-tokyo.topojson']) {
+      assert.ok(requests.some(r => r.path === base + name && r.status === 200), JSON.stringify(requests));
+    }
+    // SVG image elements do not expose HTMLImageElement.complete. Track the
+    // actual Image request's response and completion via DevTools instead.
+    await browser.command('Network.enable');
+    const imageRequest = href => browser.events().find(e => e.method === 'Network.requestWillBeSent' &&
+      e.params.type === 'Image' && e.params.request.url === href);
+    const imageFinished = href => {
+      const request = imageRequest(href);
+      return request && browser.events().some(e => e.method === 'Network.loadingFinished' && e.params.requestId === request.params.requestId);
+    };
+    const frost = await render(f.frost, `(() => { const area=document.getElementById('e2d3-chart-area'); if(!area)return null;
+      const image=area.querySelector('svg image'); return {${common}, svgs:area.querySelectorAll('svg').length,
+        labels:[...area.querySelectorAll('svg g.runner text')].map(x=>x.textContent),
+        href:image?.href?.baseVal || image?.getAttribute('href') || image?.getAttribute('xlink:href')}; })()`,
+      v => v.svgs === 1 && v.labels.length === 15 && v.href && imageFinished(v.href));
+    assert.deepEqual(frost.labels, f.frostRows.slice(1).map(row => row[0]));
+    assert.ok(!frost.labels.includes('Tajitsu'));
+    assert.ok(frost.href.endsWith(`/${f.frost.id}/map.jpg`), frost.href);
+    const imageId = imageRequest(frost.href).params.requestId;
+    assert.ok(browser.events().some(e => e.method === 'Network.responseReceived' && e.params.requestId === imageId && e.params.response.status === 200));
+    assert.ok(!browser.events().some(e => e.method === 'Network.loadingFailed' && e.params.requestId === imageId));
+    // SVGImageElement has no HTMLImageElement.complete/naturalWidth. Decode the
+    // exact SVG href in an Image, and require the SVG request itself to succeed.
+    const image = await browser.command('Runtime.evaluate', { expression: `(async () => {
+      const svgImage=document.querySelector('#e2d3-chart-area svg image');
+      const href=svgImage.href.baseVal; const img=new Image(); img.src=href;
+      try { await img.decode(); } catch(e) { return {error:String(e), href}; }
+      return {href, complete:img.complete, width:img.naturalWidth, height:img.naturalHeight,
+        chartError:!document.getElementById('e2d3-error').hidden}; })()`, awaitPromise: true, returnByValue: true });
+    assert.ok(image.result.value?.complete && image.result.value.width > 0 && image.result.value.height > 0, JSON.stringify(image));
+    assert.equal(image.result.value.chartError, false);
+    assert.ok(requests.some(r => r.path === `/project-name/data/contents/blog/_e2d3/${f.frost.id}/map.jpg` && r.status === 200), JSON.stringify(requests));
+
+    await browser.command('Network.setCacheDisabled', { cacheDisabled: true });
+    async function expectResourceError(g, resource) {
+      const base = `/project-name/data/contents/blog/_e2d3/${g.id}/`;
+      denied.add(base + resource);
+      const url = `http://127.0.0.1:${server.address().port}/project-name/data/contents/blog/_e2d3/${g.id}.html`;
+      await browser.command('Page.navigate', { url });
+      let value;
+      for (let i = 0; i < 150; i++) {
+        try {
+          const result = await browser.command('Runtime.evaluate', { expression: `({url:location.href,error:!document.getElementById('e2d3-error')?.hidden})`, returnByValue: true });
+          value = result.result?.value;
+        } catch (_) { /* Navigation can replace the execution context. */ }
+        if (value?.url === url && value.error) break;
+        await sleep(100);
+      }
+      assert.ok(value?.url === url && value.error, JSON.stringify(value));
+      assert.ok(requests.some(r => r.path === base + resource && r.status === 404));
+    }
+    await expectResourceError(f.map, 'jp013-tokyo.topojson');
+    await expectResourceError(f.frost, 'map.jpg');
   } finally { if (browser) await browser.close(); await new Promise(resolve => server.close(resolve)); }
 });
