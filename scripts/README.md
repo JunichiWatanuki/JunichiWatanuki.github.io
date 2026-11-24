@@ -12,6 +12,7 @@
 - 各種別のサムネイルは `data/sources/blog/`、`data/sources/sample/`、`data/sources/training/` の直下に `thumbnail.jpg`、`thumbnail.png` または `thumbnail.gif` を配置します。複数ある場合は JPG、PNG、GIF の順で優先します。画像がない種別では `assets/junichiwatanuki.jpg` を使います。追加・変更・削除は次のビルドで反映されます。
 - 種別内の媒体は同じ相対位置で出力され、`data/sources/` 内の種別外共有メディアも `data/contents/` に保持します。サイト内の明示的な `data/sources/...` 参照用にもメディアのコピーを残します。サイトルートや `data/` 内に置かれたソース外の静的メディアも公開用ディレクトリへコピーします。相対パスのソース記事リンクは対応する HTML へ変換され、クエリ・フラグメントは維持されます。実ファイル名の空白、日本語、`#`、`?`、`%` などは公開 URL と `index.json` でパーセントエンコードします。Markdown のリンク先に含まれるファイル名の `#`、`?`、`%` は区切り文字と区別するため、それぞれ `%23`、`%3F`、`%25` と記述してください。リポジトリ外・別サーバーのリソースを自動取得することはありません。
 - カテゴリと記事のメニュー、記事メタデータを公開用 `index.json` に生成します。日付ありは日付降順、同日は URL 降順、日付不明はその後ろに URL 降順で並びます。ローカルプレビューでは作業ツリーのルート `index.json` は生成・更新しません。GitHub Actions では生成後、公開用 `.site/index.json` と同じ内容をルートの `index.json` に保存します。ルートの `index.json` は編集元ではなく生成物のため、手編集は次回の生成時に上書きされます。
+- ブラウザーはページの読み込み時に `index.json` のキャッシュを再検証します。すでに開いているページや「戻る」操作で復元されたページは自動更新されないため、必要に応じて再読み込みしてください。記事のソース名を変更すると記事の URL も変わりますが、旧 URL からの転送は自動作成しません。
 - 同じ出力先になる記事や既存メディアとの衝突、見出し・脚注・テンプレート間の ID 衝突、ソースツリーのシンボリックリンク、パス内のバックスラッシュ・制御文字は、曖昧または危険な入力としてエラーにします。
 
 ## ブログのカスタムコードブロック
@@ -145,6 +146,7 @@ python3 -m http.server --directory /tmp/greenlog-site 8000
 /tmp/greenlog-venv/bin/python scripts/test_build.py -v
 /tmp/greenlog-venv/bin/python scripts/test_custom_embeds.py -v
 /tmp/greenlog-venv/bin/python scripts/test_comments.py -v
+node --test scripts/test_common.mjs
 npm run test:e2d3
 ```
 

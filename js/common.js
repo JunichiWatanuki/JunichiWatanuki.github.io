@@ -232,7 +232,7 @@ export async function initCommon() {
   window.addEventListener('pageshow', restoreCurrentCategory);
   void loadSocialLinks();
   try {
-    const response = await fetch(indexAddress);
+    const response = await fetch(indexAddress, { cache: 'no-cache' });
     if (!response.ok) throw new Error(`index.json: ${response.status}`);
     const data = await response.json();
     populateNavigation(data);

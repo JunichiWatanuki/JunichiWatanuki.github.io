@@ -210,6 +210,29 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(len(json.loads((self.site / "index.json").read_text(encoding="utf-8"))["posts"]), 2)
         self.assertFalse((self.root / "index.json").exists())
 
+    def test_blog_source_rename_updates_generated_page_and_index(self):
+        old_source = self.root / "data/sources/blog/e2d3-recollection.md"
+        self.write("data/sources/blog/e2d3-recollection.md", "# なつかしいE2D3\n\n本文です。\n")
+        old_path = "data/contents/blog/e2d3-recollection.html"
+        new_path = "data/contents/blog/2026-11-24.html"
+        self.run_build()
+        before = json.loads((self.site / "index.json").read_text(encoding="utf-8"))
+        self.assertIn(old_path, [post["path"] for post in before["posts"]])
+        self.assertTrue((self.site / old_path).is_file())
+
+        old_source.rename(old_source.with_name("20261124.md"))
+        self.run_build()
+        after = json.loads((self.site / "index.json").read_text(encoding="utf-8"))
+        posts = [post["path"] for post in after["posts"]]
+        blog = next(item for item in after["menu"] if item["label"] == "ブログ")
+        links = [item["href"] for item in blog["children"]]
+        self.assertIn(new_path, posts)
+        self.assertIn(new_path, links)
+        self.assertNotIn(old_path, posts)
+        self.assertNotIn(old_path, links)
+        self.assertTrue((self.site / new_path).is_file())
+        self.assertFalse((self.site / old_path).exists())
+
     def test_training_titles_and_year_month_navigation(self):
         self.write_fit("data/sources/training/nested/swim.fit",
                        datetime(2024, 12, 31, 16, 0, tzinfo=timezone.utc),

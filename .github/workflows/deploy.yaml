@@ -65,6 +65,8 @@ jobs:
         with:
           node-version: '22.23.4'
           cache: npm
+      - name: Test index revalidation
+        run: node --test scripts/test_common.mjs
       - name: Install fixed Node dependencies
         run: |
           set -euo pipefail
