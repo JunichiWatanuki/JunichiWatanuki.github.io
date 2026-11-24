@@ -15,6 +15,10 @@
         {
           "label": "個人サイトのリニューアル",
           "href": "data/contents/blog/2026-11-14.html"
+        },
+        {
+          "label": "e2d3-recollection",
+          "href": "data/contents/blog/e2d3-recollection.html"
         }
       ]
     },
@@ -301,6 +305,14 @@
       "path": "data/contents/sample/2024-12-25.html",
       "excerpt": "サンプルの記録：ウォーキング、ストレッチ",
       "thumbnail": "data/sources/sample/thumbnail.jpg"
+    },
+    {
+      "title": "e2d3-recollection",
+      "date": "日付不明",
+      "type": "blog",
+      "path": "data/contents/blog/e2d3-recollection.html",
+      "excerpt": "約10年前に「E2D3」というデータ可視化ツールを使って作成した、ちょっと面白いグラフを再現してみました。",
+      "thumbnail": "data/sources/blog/thumbnail.jpg"
     }
   ]
 }

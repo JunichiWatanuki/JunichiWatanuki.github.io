@@ -13,9 +13,23 @@ body { display:flex; flex-direction:column }
   function fail() { document.getElementById('e2d3-error').hidden = false; }
   // RequireJS may try a CDN first and then successfully load a local fallback.
   // Only uncaught script errors are fatal here; the timeout covers no output.
-  window.addEventListener('error', function (event) { if (event.target === window) fail(); }, true);
+  var template = "bipartite-graph-original";
+  window.addEventListener('error', function (event) {
+    if (event.target === window || (template === 'virtual-frostbite-halfmarathon' &&
+        event.target.localName === 'image')) fail();
+  }, true);
   window.addEventListener('unhandledrejection', fail);
-  setTimeout(function () { if (!document.getElementById('e2d3-chart-area').children.length) fail(); }, 12000);
+  setTimeout(function () {
+    var area = document.getElementById('e2d3-chart-area');
+    var selector = {
+      'InfiniteElementMethod_E2D3-LIG_03': '#SalesAttempts .edges .edge',
+      'force-directed-graph': 'svg circle',
+      'jp013-tokyo': 'path.states',
+      'virtual-frostbite-halfmarathon': 'svg image'
+    }[template];
+    if ((selector ? !area.querySelector(selector) : !area.children.length) ||
+        (template === 'jp013-tokyo' && !area.querySelector('#attrMenu .label-selector'))) fail();
+  }, 12000);
   function fit() {
     document.querySelectorAll('#e2d3-chart-area svg').forEach(function (s) {
       var wa = s.getAttribute('width') || '', ha = s.getAttribute('height') || '';
@@ -39,5 +53,14 @@ body { display:flex; flex-direction:column }
   new MutationObserver(fit).observe(document.getElementById('e2d3-chart-area'),
     {childList:true, subtree:true, attributes:true, attributeFilter:['width','height']});
   window.addEventListener('load', fit);
+  // The upstream runtime changes <base> before a template uses baseUrl.
+  // An absolute URL prevents a relative template path being added twice.
+  var runtime = document.createElement('script');
+  runtime.src = 'runtime/e2d3.js';
+  runtime.setAttribute('data-base-url', new URL('./a06d1c7609d1825862db5700c45b97790be619c204ee79a54b6b657043203b4f', location.href).href);
+  runtime.setAttribute('data-data-type', 'csv');
+  runtime.setAttribute('data-data-url', 'data.csv');
+  runtime.onerror = fail;
+  document.body.appendChild(runtime);
 })();
-</script><script src="runtime/e2d3.js" data-base-url="./a06d1c7609d1825862db5700c45b97790be619c204ee79a54b6b657043203b4f" data-data-type="csv" data-data-url="data.csv"></script></body></html>
+</script></body></html>
